@@ -153,21 +153,16 @@ async function handleEvent(event) {
       ``,
       `🔗 URL: ${notionPage.url}`,
       ``,
-      `📊 登録情報:`,
-      `┃ 📝 タイトル: ${actualProps.title || 'Untitled'}`,
-      `┃ 📋 ステータス: ${actualProps.ステータス || '未設定'}`,
-      `┃ 🏷️ 種別: ${actualProps.種別 || '未設定'}`,
-      `┃ ⭐ 優先度: ${actualProps.優先度 || '未設定'}`,
-      `┃ 📦 成果物: ${actualProps.成果物 || '未設定'}`,
-      `┃ 🎚️ レベル: ${actualProps.レベル || '未設定'}`,
-      `┃ 💼 案件: ${actualProps.案件 || '未設定'}`,
-      `┃ 👤 担当者: ${actualProps.担当者 || '未設定'}`
+      `📝 タイトル: ${actualProps.title || 'Untitled'}`,
+      `📋 ステータス: ${actualProps.ステータス || '未設定'}`,
+      `⭐ 優先度: ${actualProps.優先度 || '未設定'}`,
+      `🏷️ 種別: ${actualProps.種別 || '未設定'}`,
+      `🎚️ レベル: ${actualProps.レベル || '未設定'}`,
+      `📦 成果物: ${actualProps.成果物 || '未設定'}`,
+      `👤 担当者: ${actualProps.担当者 || '未設定'}`,
+      `🗓️ 期限: ${actualProps.期限 || '未設定'}`,
+      `💼 案件: ${actualProps.案件 || '未設定'}`
     ];
-
-    // 期限が設定されている場合は追加
-    if (actualProps.期限 && actualProps.期限 !== '未設定') {
-      registrationDetails.push(`┃ ⏰ 期限: ${actualProps.期限}`);
-    }
 
     registrationDetails.push(``);
     registrationDetails.push(`🎉 プロジェクト管理の準備が整いました！`);
