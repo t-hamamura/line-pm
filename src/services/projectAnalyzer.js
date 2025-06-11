@@ -48,23 +48,74 @@ class ProjectAnalyzer {
 ユーザー入力テキスト「${text}」を解析し、上記の形式でJSONオブジェクトのみを出力してください。
 `;
 
-      const model = this.gemini.getGenerativeModel({ model: "gemini-pro" });
+      // 最新のGemini 1.5 Flashモデルを使用
+      const model = this.gemini.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        }
+      });
+      
+      console.log('[GEMINI] Using model: gemini-1.5-flash');
       const result = await model.generateContent(systemPrompt);
       const response = await result.response;
       const jsonString = response.text();
       
-      const parsedResult = JSON.parse(jsonString);
+      console.log('[GEMINI] Raw response:', jsonString);
+      
+      // JSONの前後にある不要な文字列を除去
+      let cleanedJsonString = jsonString.trim();
+      
+      // ```json ``` などのマークダウン形式を除去
+      if (cleanedJsonString.startsWith('```json')) {
+        cleanedJsonString = cleanedJsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      } else if (cleanedJsonString.startsWith('```')) {
+        cleanedJsonString = cleanedJsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
+      }
+      
+      const parsedResult = JSON.parse(cleanedJsonString);
       
       // プロジェクト名を別途設定
       parsedResult.properties.Name = text;
 
-      console.log('Analyzed data from Gemini:', JSON.stringify(parsedResult, null, 2));
+      console.log('[GEMINI] Analyzed data:', JSON.stringify(parsedResult, null, 2));
       return parsedResult;
 
     } catch (error) {
-      console.error('Error analyzing project with Gemini:', error);
+      console.error('[GEMINI] Error details:', error);
+      
+      // Geminiエラーの場合は、フォールバック処理
+      if (error.message.includes('GoogleGenerativeAI') || error.message.includes('404')) {
+        console.log('[GEMINI] Using fallback analysis due to API error');
+        return this.createFallbackAnalysis(text);
+      }
+      
       throw new Error('プロジェクト情報の解析に失敗しました: ' + error.message);
     }
+  }
+
+  // フォールバック用の簡易解析
+  createFallbackAnalysis(text) {
+    const analysis = {
+      properties: {
+        Name: text,
+        ステータス: "未着手",
+        種別: "メモ",
+        優先度: "普通",
+        期限: null,
+        フェーズ: "アイデア",
+        担当者: "未定",
+        成果物: "その他",
+        レベル: text.length > 20 ? "プロジェクト" : "タスク"
+      },
+      pageContent: `## 概要\n${text}\n\n## 次のアクション\n- 詳細を検討する\n- 必要なリソースを確認する\n- スケジュールを立てる`
+    };
+    
+    console.log('[GEMINI] Fallback analysis created:', JSON.stringify(analysis, null, 2));
+    return analysis;
   }
 
   validateProjectData(data) {
@@ -95,4 +146,4 @@ class ProjectAnalyzer {
   }
 }
 
-module.exports = new ProjectAnalyzer(); 
+module.exports = new ProjectAnalyzer();
