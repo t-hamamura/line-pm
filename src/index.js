@@ -370,10 +370,13 @@ app.post('/webhook', (req, res) => {
 
         // イベント処理
         console.log(`[WEBHOOK] Processing ${requestBody.events.length} events...`);
-        await Promise.all(requestBody.events.map(handleEvent));
-        
+        for (const event of requestBody.events) {
+          await handleEvent(event);
+        }
+
         console.log('[WEBHOOK] Events processed successfully');
         res.status(200).send('OK');
+
         
       } catch (error) {
         console.error('[WEBHOOK] Error processing request:', error);
