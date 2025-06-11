@@ -22,7 +22,7 @@ app.post('/webhook', middleware(config), (req, res) => {
     });
 });
 
-// イベント処理（必要に応じて編集）
+// イベント処理
 function handleEvent(event) {
   if (event.type !== 'message' || event.message.type !== 'text') {
     return Promise.resolve(null);
@@ -33,11 +33,11 @@ function handleEvent(event) {
   });
 }
 
-// サーバー起動
-const PORT = process.env.PORT || 8080;
+// サーバー起動（環境変数 PORT を使用）
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log('===================================');
-  console.log(`Server running on port ${PORT}`);
-  console.log('Ready to receive LINE webhook requests!');
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log('✅ Ready to receive LINE webhook requests!');
   console.log('===================================');
 });
