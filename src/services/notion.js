@@ -103,17 +103,22 @@ class NotionService {
       // 現在の日付を設定
       const today = new Date().toISOString().split('T')[0];
       
-      // 各プロパティを動的にマッピング
+      // 各プロパティを動的にマッピング（新しいテーブル構造に対応）
       const valueMap = {
-        'ステータス': properties.ステータス || '未着手',
-        '種別': properties.種別 || 'メモ',
+        'ステータス': properties.ステータス || '未分類',
+        '種別': properties.種別 || 'その他・雑務',
         '優先度': properties.優先度 || '普通',
-        'フェーズ': properties.フェーズ || 'アイデア',
         '成果物': properties.成果物 || 'その他',
         'レベル': properties.レベル || 'タスク',
-        '担当者': properties.担当者 || '未定',
+        '案件': properties.案件 || 'その他',
+        '担当者': properties.担当者 || '自分',
         '記入日': today
       };
+
+      // 期限が指定されている場合は追加
+      if (properties.期限 && properties.期限 !== 'YYYY-MM-DD' && properties.期限 !== null) {
+        valueMap['期限'] = properties.期限;
+      }
 
       // 各プロパティを実際のスキーマに基づいて設定
       for (const [propName, value] of Object.entries(valueMap)) {
@@ -204,6 +209,11 @@ class NotionService {
                 notionProperties[propName] = { number: Number(value) };
                 console.log(`[NOTION] ✅ Set number: ${propName} = ${value}`);
               }
+              break;
+
+            case 'relation':
+              // リレーション（親プロジェクト、子タスク）は現時点では空のまま
+              console.log(`[NOTION] ⚠️ Relation property ${propName} skipped (will be set manually later)`);
               break;
 
             default:
@@ -321,6 +331,9 @@ class NotionService {
   async testConnection() {
     try {
       console.log('[NOTION] Testing connection...');
+      console.log(`[NOTION] Using database ID: ${this.databaseId}`);
+      console.log(`[NOTION] API Key format: ${process.env.NOTION_API_KEY?.substring(0, 10)}...`);
+      
       await this.getDatabaseSchema();
       console.log('[NOTION] ✅ Connection test successful!');
       return true;
@@ -328,6 +341,16 @@ class NotionService {
       console.error('[NOTION] ❌ Connection test failed:', error.message);
       throw error;
     }
+  }
+
+  // ヘルスチェック用メソッド
+  getHealthStatus() {
+    return {
+      status: this.databaseSchema ? 'healthy' : 'unknown',
+      databaseId: this.databaseId ? 'configured' : 'missing',
+      apiKey: process.env.NOTION_API_KEY ? 'configured' : 'missing',
+      schemaLoaded: !!this.databaseSchema
+    };
   }
 }
 
