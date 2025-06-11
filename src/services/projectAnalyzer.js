@@ -11,13 +11,14 @@ class ProjectAnalyzer {
   async analyzeText(text) {
     try {
       const systemPrompt = `
-あなたはプロジェクト管理の専門家です。ユーザーの入力を分析し、実行可能なアクションプランを作成してください。
+あなたはマーケティング・コンサルティングに関するプロジェクト管理の専門家です。ユーザーの入力を分析し、実行可能なアクションプランを作成してください。
 
 # 重要な指示
 1. JSONオブジェクトのみを出力（\`\`\`json は不要）
 2. pageContentには必ず詳細なWBSまたは具体的な内容を記述
 3. 推測できない項目はnullを設定（ステータス以外）
 4. 実際のNotionプロパティ値のみ使用（半角空白含む）
+5. メッセージから読み取れない推論をしてはならない
 
 # Notionプロパティの正確な選択肢（半角空白を含む正確な値）
 
@@ -37,25 +38,25 @@ class ProjectAnalyzer {
 
 ## レベル
 - "🏛 戦略レベル" - 3ヶ月以上、事業・組織全体に大きな影響
-- "📂 プロジェクト" - 1-3ヶ月、複数人のチーム
-- "✅ タスク" - 1-4週間、個人または少数で完結
-- "⚡ アクション" - 1日-1週間、すぐできる作業
+- "📂 プロジェクト" - 1週間-3ヶ月、複数人のチーム
+- "✅ タスク" - 3分-1週間、個人または少数で完結
+- "⚡ アクション" - 0分-3分、すぐできる作業
 - "💭 メモ" - 思考整理、アイデア出し
 
 ## 成果物
 - "📄 資料・企画書" - 戦略書、企画書、提案書、計画書
-- "🎨 コンテンツ" - LP、動画、記事、SNS投稿、メルマガ
+- "🎨 コンテンツ" - LP、動画、記事、SNS投稿、メルマガ、Webサイト
 - "📈 レポート" - 分析結果、効果測定、業績報告
-- "⚙ システム・ツール" - Webサイト、アプリ、業務ツール
+- "⚙ システム・ツール" - アプリ、業務ツール、システム
 - "📋 ルール・仕組み" - 業務フロー、マニュアル、制度設計
 - "🎯 その他" - 上記に当てはまらない成果物
 
 ## 案件
-- "ONEマーケ/マーケラボ" - マーケティング関連
-- "るい/redeal" - 営業・セールス関連
-- "アンスポーテ" - スポーツ関連事業
-- "池袋サンシャイン美容" - 美容事業関連
-- "femuse" - 女性向けサービス
+- "ONEマーケ／マーケラボ" - ONEマーケやマーケラボに関連している
+- "るい／redeal." - るいやredeal.に関連している
+- "アンズボーテ" - アンズボーテに関連している
+- "池袋サンシャイン美容外科" - 池袋サンシャイン美容外科に関連している
+- "femuse" - femuseに関連している
 - "その他" - 上記に当てはまらない案件
 
 # 出力JSONフォーマット
@@ -260,15 +261,15 @@ JSON形式で出力してください：`;
     }
     
     // 案件判定（正確な値）
-    if (textLower.includes('マーケ') || textLower.includes('マーケティング')) {
-      project = "ONEマーケ/マーケラボ";
-    } else if (textLower.includes('redeal') || textLower.includes('るい')) {
-      project = "るい/redeal";
-    } else if (textLower.includes('アンスポーテ') || textLower.includes('スポーツ')) {
-      project = "アンスポーテ";
-    } else if (textLower.includes('美容') || textLower.includes('池袋') || textLower.includes('サンシャイン')) {
-      project = "池袋サンシャイン美容";
-    } else if (textLower.includes('femuse')) {
+    if (textLower.includes('ONEマーケ') || textLower.includes('マーケラボ')) {
+      project = "ONEマーケ／マーケラボ";
+    } else if (textLower.includes('redeal') || textLower.includes('リディアル') || textLower.includes('るい')) {
+      project = "るい／redeal.";
+    } else if (textLower.includes('アンズボーテ')) {
+      project = "アンズボーテ";
+    } else if (textLower.includes('池袋サンシャイン') || textLower.includes('サンシャイン')) {
+      project = "池袋サンシャイン美容外科";
+    } else if (textLower.includes('femuse') || textLower.includes('フェミューズ')) {
       project = "femuse";
     }
     
