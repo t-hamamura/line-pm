@@ -19,12 +19,16 @@ if (!lineConfig.channelAccessToken || !lineConfig.channelSecret) {
     process.exit(1);
 }
 
-const PORT = process.env.PORT || 8080; // Railwayは通常8080を使用
+const PORT = process.env.PORT || 8080;
 const app = express();
 
 let lineClient;
 let projectAnalyzer;
 let notionService;
+
+// 重複防止用のキャッシュ
+const processedMessages = new Map();
+const CACHE_EXPIRY = 5 * 60 * 1000; // 5分
 
 try {
     lineClient = new Client(lineConfig);
@@ -51,7 +55,37 @@ try {
     notionService = null;
 }
 
-// --- 2. メインの処理フローを定義 ---
+// --- 2. 重複チェック関数 ---
+
+function isDuplicateMessage(userId, messageText, timestamp) {
+  const key = `${userId}_${messageText}`;
+  const now = Date.now();
+  
+  // 古いキャッシュをクリーンアップ
+  for (const [cacheKey, cacheData] of processedMessages.entries()) {
+    if (now - cacheData.timestamp > CACHE_EXPIRY) {
+      processedMessages.delete(cacheKey);
+    }
+  }
+  
+  // 重複チェック
+  if (processedMessages.has(key)) {
+    const lastProcessed = processedMessages.get(key);
+    const timeDiff = now - lastProcessed.timestamp;
+    
+    if (timeDiff < CACHE_EXPIRY) {
+      console.log(`[DUPLICATE] Message already processed ${timeDiff}ms ago: "${messageText}"`);
+      return true;
+    }
+  }
+  
+  // 新しいメッセージとして記録
+  processedMessages.set(key, { timestamp: now });
+  console.log(`[NEW] Processing new message: "${messageText}"`);
+  return false;
+}
+
+// --- 3. メインの処理フローを定義 ---
 
 async function handleEvent(event) {
   // テキストメッセージ以外、または空のメッセージは無視
@@ -61,7 +95,17 @@ async function handleEvent(event) {
   }
 
   const userText = event.message.text;
-  console.log(`[EVENT] Received text message: "${userText}"`);
+  const userId = event.source.userId;
+  const timestamp = Date.now();
+  
+  console.log(`[EVENT] Received text message from ${userId}: "${userText}"`);
+
+  // 重複チェック
+  if (isDuplicateMessage(userId, userText, timestamp)) {
+    console.log('[SKIP] Duplicate message detected, skipping processing');
+    // 重複の場合は何もしない（LINEには応答しない）
+    return Promise.resolve(null);
+  }
 
   // サービスが利用できない場合の処理
   if (!projectAnalyzer || !notionService) {
@@ -79,6 +123,42 @@ async function handleEvent(event) {
   }
 
   try {
+    // 処理開始をLINEに通知（即座にレスポンス）
+    const processingMessage = {
+      type: 'text',
+      text: '📝 解析中です。少々お待ちください...'
+    };
+    
+    // すぐにレスポンスを返す
+    try {
+      await lineClient.replyMessage(event.replyToken, processingMessage);
+    } catch (replyError) {
+      console.error('[ERROR] Failed to send processing message:', replyError);
+    }
+
+    // バックグラウンドで実際の処理を実行
+    processMessageInBackground(userText, userId);
+
+  } catch (error) {
+    console.error('[ERROR] Failed to handle event:', error);
+    // 既にレスポンスが送信されているため、ここではpush messageを使用
+    const errorMessage = {
+      type: 'text',
+      text: `❌ エラーが発生しました。再度お試しください。\n\n詳細: ${error.message}`
+    };
+    try {
+      await lineClient.pushMessage(userId, errorMessage);
+    } catch (pushError) {
+      console.error('[ERROR] Failed to send error push message:', pushError);
+    }
+  }
+}
+
+// バックグラウンド処理
+async function processMessageInBackground(userText, userId) {
+  try {
+    console.log('[BACKGROUND] Starting background processing...');
+    
     // Geminiでテキストを解析
     console.log('[GEMINI] Analyzing text...');
     const analysisResult = await projectAnalyzer.analyzeText(userText);
@@ -88,30 +168,28 @@ async function handleEvent(event) {
     const notionPage = await notionService.createPageFromAnalysis(analysisResult);
 
     // 成功をLINEに通知
-    console.log(`[LINE] Replying with success message. Notion URL: ${notionPage.url}`);
-    const replyMessage = {
+    console.log(`[SUCCESS] Process completed. Notion URL: ${notionPage.url}`);
+    const successMessage = {
       type: 'text',
       text: `✅ Notionにページを作成しました！\n\n📄 ページ: ${notionPage.url}`
     };
-    await lineClient.replyMessage(event.replyToken, replyMessage);
+    await lineClient.pushMessage(userId, successMessage);
 
   } catch (error) {
-    console.error('[ERROR] Failed to handle event:', error);
-    // エラーが発生したことをLINEに通知
+    console.error('[BACKGROUND ERROR] Background processing failed:', error);
     const errorMessage = {
       type: 'text',
-      text: `❌ エラーが発生しました。\n大変お手数ですが、再度お試しください。\n\n詳細: ${error.message}`
+      text: `❌ 処理中にエラーが発生しました。\n再度お試しください。\n\n詳細: ${error.message}`
     };
-    // エラー時はいつでもリプライできるとは限らないので、try-catchで囲む
     try {
-      await lineClient.replyMessage(event.replyToken, errorMessage);
-    } catch (replyError) {
-      console.error('[ERROR] Failed to send error reply to LINE:', replyError);
+      await lineClient.pushMessage(userId, errorMessage);
+    } catch (pushError) {
+      console.error('[ERROR] Failed to send background error message:', pushError);
     }
   }
 }
 
-// --- 3. Webhookエンドポイントの設定 ---
+// --- 4. Webhookエンドポイントの設定 ---
 
 // ルートパスへのアクセスはヘルスチェック用
 app.get("/", (req, res) => {
@@ -123,14 +201,14 @@ app.get("/", (req, res) => {
     services: {
       projectAnalyzer: !!projectAnalyzer,
       notionService: !!notionService
-    }
+    },
+    cacheSize: processedMessages.size
   });
 });
 
 // LINEからのWebhookリクエストを処理するエンドポイント
 app.post('/webhook', (req, res) => {
   console.log('[WEBHOOK] Received request');
-  console.log('[WEBHOOK] Headers:', JSON.stringify(req.headers, null, 2));
   
   try {
     // LINE署名の検証
@@ -148,11 +226,11 @@ app.post('/webhook', (req, res) => {
 
     req.on('end', async () => {
       try {
-        console.log('[WEBHOOK] Request body:', body);
+        console.log('[WEBHOOK] Processing request body...');
         
         // 空のボディ（検証リクエスト）の場合
         if (!body || body.trim() === '') {
-          console.log('[WEBHOOK] Empty body - this is a verification request');
+          console.log('[WEBHOOK] Empty body - verification request');
           return res.status(200).send('OK');
         }
 
@@ -165,11 +243,9 @@ app.post('/webhook', (req, res) => {
           return res.status(400).send('Invalid JSON');
         }
 
-        console.log('[WEBHOOK] Parsed body:', JSON.stringify(requestBody, null, 2));
-
         // 検証リクエストかどうかチェック
         if (!requestBody.events || requestBody.events.length === 0) {
-          console.log('[WEBHOOK] No events - this is a verification request');
+          console.log('[WEBHOOK] No events - verification request');
           return res.status(200).send('OK');
         }
 
@@ -183,26 +259,33 @@ app.post('/webhook', (req, res) => {
           return res.status(401).send('Invalid signature');
         }
 
-        // イベント処理
-        console.log('[WEBHOOK] Processing events...');
-        await Promise.all(requestBody.events.map(handleEvent));
-        
-        console.log('[WEBHOOK] Events processed successfully');
+        // 先にレスポンスを返す（LINEのタイムアウト対策）
         res.status(200).send('OK');
+
+        // イベント処理（非同期）
+        console.log('[WEBHOOK] Starting event processing...');
+        Promise.all(requestBody.events.map(handleEvent))
+          .catch(error => {
+            console.error('[WEBHOOK] Error in event processing:', error);
+          });
         
       } catch (error) {
         console.error('[WEBHOOK] Error processing request:', error);
-        res.status(500).send('Internal Server Error');
+        if (!res.headersSent) {
+          res.status(500).send('Internal Server Error');
+        }
       }
     });
 
   } catch (error) {
     console.error('[WEBHOOK] Unexpected error:', error);
-    res.status(500).send('Internal Server Error');
+    if (!res.headersSent) {
+      res.status(500).send('Internal Server Error');
+    }
   }
 });
 
-// --- 4. エラーハンドリング ---
+// --- 5. エラーハンドリング ---
 
 // 404 ハンドラー
 app.use((req, res) => {
@@ -213,15 +296,18 @@ app.use((req, res) => {
 // エラーハンドラー
 app.use((error, req, res, next) => {
   console.error('[ERROR] Unhandled error:', error);
-  res.status(500).json({ error: 'Internal Server Error' });
+  if (!res.headersSent) {
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
-// --- 5. サーバーを起動 ---
+// --- 6. サーバーを起動 ---
 
 app.listen(PORT, () => {
   console.log('==================================================');
   console.log(`         🚀 Server running on port ${PORT}`);
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('  Ready to receive LINE webhook requests!');
+  console.log('  🛡️  Duplicate message protection enabled');
   console.log('==================================================');
 });
