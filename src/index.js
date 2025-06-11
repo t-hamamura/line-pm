@@ -143,36 +143,119 @@ async function handleEvent(event) {
     console.log('[NOTION] Creating page...');
     const notionPage = await notionService.createPageFromAnalysis(analysisResult);
 
-    // 詳細な成功通知を作成（実際の値で）
+    // 詳細な成功通知を作成
     console.log(`[LINE] Creating success message with actual Notion values`);
 
     // Notionに実際に登録された値を取得
     const actualProps = await notionService.getPageProperties(notionPage.id);
-    const registrationDetails = [
-      `📄 ページが作成されました！`,
-      ``,
-      `🔗 URL: ${notionPage.url}`,
-      ``,
-      `📝 タイトル: ${actualProps.title || 'Untitled'}`,
-      `📋 ステータス: ${actualProps.ステータス || '📥 未分類'}`,
-      `⭐ 優先度: ${actualProps.優先度 || '(空欄)'}`,
-      `🏷️ 種別: ${actualProps.種別 || '(空欄)'}`,
-      `🎚️ レベル: ${actualProps.レベル || '(空欄)'}`,
-      `📦 成果物: ${actualProps.成果物 || '(空欄)'}`,
-      `👤 担当者: ${actualProps.担当者 || '(空欄)'}`,
-      `🗓️ 期限: ${actualProps.期限 || '(空欄)'}`,
-      `💼 案件: ${actualProps.案件 || '(空欄)'}`,
-      ``,
-      `📋 WBS案:`,
-      `${analysisResult.wbsProposal || 'WBS案の生成に失敗しました'}`
-    ];
 
-    registrationDetails.push(``);
-    registrationDetails.push(`🎉 プロジェクト管理の準備が整いました！`);
+    // 詳細な応答メッセージを作成
+    function createDetailedReplyMessage(analysisResult, notionPage, actualProps) {
+      const props = analysisResult.properties;
+      
+      let replyText = `✅ プロジェクトを登録しました！\n\n`;
+      replyText += `📝 タイトル: ${props.Name}\n`;
+      replyText += `📋 ステータス: 📥 未分類\n`;
+      
+      // 詳細情報（値がある場合のみ表示）
+      if (actualProps.優先度 && actualProps.優先度 !== '(空欄)') {
+        replyText += `⭐ 優先度: ${actualProps.優先度}\n`;
+      } else {
+        replyText += `⭐ 優先度: (空欄)\n`;
+      }
+      
+      if (actualProps.種別 && actualProps.種別 !== '(空欄)') {
+        replyText += `🏷️ 種別: ${actualProps.種別}\n`;
+      } else {
+        replyText += `🏷️ 種別: (空欄)\n`;
+      }
+      
+      if (actualProps.レベル && actualProps.レベル !== '(空欄)') {
+        replyText += `🎚️ レベル: ${actualProps.レベル}\n`;
+      } else {
+        replyText += `🎚️ レベル: (空欄)\n`;
+      }
+      
+      if (actualProps.成果物 && actualProps.成果物 !== '(空欄)') {
+        replyText += `📦 成果物: ${actualProps.成果物}\n`;
+      } else {
+        replyText += `📦 成果物: (空欄)\n`;
+      }
+      
+      replyText += `👤 担当者: (空欄)\n`;
+      
+      if (actualProps.期限 && actualProps.期限 !== '(空欄)') {
+        replyText += `🗓️ 期限: ${actualProps.期限}\n`;
+      } else {
+        replyText += `🗓️ 期限: (空欄)\n`;
+      }
+      
+      if (actualProps.案件 && actualProps.案件 !== '(空欄)') {
+        replyText += `💼 案件: ${actualProps.案件}\n`;
+      } else {
+        replyText += `💼 案件: (空欄)\n`;
+      }
+      
+      replyText += `\n`;
+      
+      // WBS提案の表示
+      if (analysisResult.pageContent && analysisResult.pageContent.trim()) {
+        replyText += `📋 WBS案:\n`;
+        
+        const wbsSummary = extractWBSSummary(analysisResult.pageContent);
+        if (wbsSummary.length > 0) {
+          wbsSummary.forEach((item, index) => {
+            if (index < 6) {
+              replyText += `${index + 1}. ${item}\n`;
+            }
+          });
+          if (wbsSummary.length > 6) {
+            replyText += `... 他${wbsSummary.length - 6}項目\n`;
+          }
+        } else {
+          replyText += `詳細な実行計画が作成されました\n`;
+        }
+        replyText += `\n`;
+      }
+      
+      replyText += `🔗 詳細: ${notionPage.url}`;
+      return replyText;
+    }
+
+    // WBS要約抽出関数
+    function extractWBSSummary(pageContent) {
+      const items = [];
+      
+      const checklistMatches = pageContent.match(/- \[ \] (.+)/g);
+      if (checklistMatches) {
+        checklistMatches.forEach(match => {
+          const item = match.replace('- [ ] ', '').trim();
+          if (item.length > 0 && item.length < 50) {
+            items.push(item);
+          }
+        });
+      }
+      
+      if (items.length === 0) {
+        const phaseMatches = pageContent.match(/#### (.+)/g);
+        if (phaseMatches) {
+          phaseMatches.forEach(match => {
+            const phase = match.replace('#### ', '').trim();
+            if (phase.length > 0 && phase.length < 50) {
+              items.push(phase);
+            }
+          });
+        }
+      }
+      
+      return items;
+    }
+
+    const replyText = createDetailedReplyMessage(analysisResult, notionPage, actualProps);
 
     const replyMessage = {
       type: 'text',
-      text: registrationDetails.join('\n')
+      text: replyText
     };
 
     await lineClient.replyMessage(event.replyToken, replyMessage);
