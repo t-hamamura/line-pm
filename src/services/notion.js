@@ -2,8 +2,6 @@ const { Client } = require('@notionhq/client');
 
 /**
  * Markdown形式のWBS文字列をNotionのブロックオブジェクトに変換します。
- * @param {string} wbsText - Markdown形式のテキスト。
- * @returns {Array} Notion APIのブロックオブジェクトの配列。
  */
 function wbsToBlocks(wbsText) {
   if (!wbsText || typeof wbsText !== 'string' || wbsText.trim() === '') {
@@ -54,145 +52,228 @@ class NotionService {
       auth: process.env.NOTION_API_KEY,
     });
     this.databaseId = process.env.NOTION_DATABASE_ID;
+    this.databaseSchema = null;
   }
   
+  async getDatabaseSchema() {
+    if (!this.databaseSchema) {
+      console.log('[NOTION] Fetching database schema...');
+      const database = await this.client.databases.retrieve({
+        database_id: this.databaseId
+      });
+      this.databaseSchema = database.properties;
+      
+      console.log('[NOTION] Database schema retrieved:');
+      Object.entries(this.databaseSchema).forEach(([key, prop]) => {
+        console.log(`  - ${key}: ${prop.type}`);
+        if (prop.type === 'select' && prop.select?.options) {
+          console.log(`    Select options: ${prop.select.options.map(opt => opt.name).join(', ')}`);
+        }
+        if (prop.type === 'multi_select' && prop.multi_select?.options) {
+          console.log(`    Multi-select options: ${prop.multi_select.options.map(opt => opt.name).join(', ')}`);
+        }
+        if (prop.type === 'status' && prop.status?.options) {
+          console.log(`    Status options: ${prop.status.options.map(opt => opt.name).join(', ')}`);
+        }
+      });
+    }
+    return this.databaseSchema;
+  }
+
   async createPageFromAnalysis(analysisResult) {
     try {
-      console.log('[NOTION] Saving analysis result to Notion:', JSON.stringify(analysisResult, null, 2));
-      
+      console.log('[NOTION] Starting page creation process...');
       const { properties, pageContent } = analysisResult;
+      
+      // データベースのスキーマを取得
+      const schema = await this.getDatabaseSchema();
+      
+      // 基本プロパティ（Nameは必須）
+      const notionProperties = {};
+      
+      // タイトルプロパティを探して設定
+      const titleProperty = Object.keys(schema).find(key => schema[key].type === 'title');
+      if (titleProperty) {
+        notionProperties[titleProperty] = {
+          title: [{ text: { content: properties.Name || 'Untitled' } }]
+        };
+        console.log(`[NOTION] Set title property: ${titleProperty}`);
+      }
 
-      // 基本的なプロパティを設定（Notionの実際の構造に基づく）
-      const notionProperties = {
-        'Name': { 
-          title: [{ text: { content: properties.Name || 'Untitled' } }] 
-        }
-      };
-
-      // 記入日を現在の日付に設定
+      // 現在の日付を設定
       const today = new Date().toISOString().split('T')[0];
-      notionProperties['記入日'] = { 
-        date: { start: today } 
-      };
-
-      // 各プロパティを安全に設定
-      const propertyMapping = {
+      
+      // 各プロパティを動的にマッピング
+      const valueMap = {
         'ステータス': properties.ステータス || '未着手',
         '種別': properties.種別 || 'メモ',
         '優先度': properties.優先度 || '普通',
         'フェーズ': properties.フェーズ || 'アイデア',
         '成果物': properties.成果物 || 'その他',
-        'レベル': properties.レベル || 'タスク'
+        'レベル': properties.レベル || 'タスク',
+        '担当者': properties.担当者 || '未定',
+        '記入日': today
       };
 
-      // 各プロパティを設定（select typeと仮定）
-      for (const [notionKey, value] of Object.entries(propertyMapping)) {
-        if (value) {
-          try {
-            notionProperties[notionKey] = { select: { name: value } };
-          } catch (error) {
-            console.log(`[NOTION] Warning: Could not set ${notionKey} to ${value}`);
-          }
+      // 各プロパティを実際のスキーマに基づいて設定
+      for (const [propName, value] of Object.entries(valueMap)) {
+        if (!schema[propName]) {
+          console.log(`[NOTION] Property "${propName}" not found in schema, skipping`);
+          continue;
         }
-      }
 
-      // 担当者（multi_select typeと仮定）
-      if (properties.担当者) {
+        const propConfig = schema[propName];
+        console.log(`[NOTION] Processing property: ${propName} (${propConfig.type}) = ${value}`);
+
         try {
-          notionProperties['担当者'] = { 
-            multi_select: [{ name: properties.担当者 }] 
-          };
-        } catch (error) {
-          console.log(`[NOTION] Warning: Could not set 担当者 to ${properties.担当者}`);
+          switch (propConfig.type) {
+            case 'select':
+              const selectOptions = propConfig.select?.options || [];
+              const matchingSelect = selectOptions.find(opt => 
+                opt.name === value || opt.name.toLowerCase() === value.toLowerCase()
+              );
+              
+              if (matchingSelect) {
+                notionProperties[propName] = { select: { name: matchingSelect.name } };
+                console.log(`[NOTION] ✅ Set select: ${propName} = ${matchingSelect.name}`);
+              } else {
+                console.log(`[NOTION] ⚠️ Value "${value}" not found in select options for ${propName}`);
+                console.log(`[NOTION] Available options: ${selectOptions.map(opt => opt.name).join(', ')}`);
+                // デフォルト値を使用
+                if (selectOptions.length > 0) {
+                  notionProperties[propName] = { select: { name: selectOptions[0].name } };
+                  console.log(`[NOTION] ✅ Using default: ${propName} = ${selectOptions[0].name}`);
+                }
+              }
+              break;
+
+            case 'multi_select':
+              const multiOptions = propConfig.multi_select?.options || [];
+              const matchingMulti = multiOptions.find(opt => 
+                opt.name === value || opt.name.toLowerCase() === value.toLowerCase()
+              );
+              
+              if (matchingMulti) {
+                notionProperties[propName] = { multi_select: [{ name: matchingMulti.name }] };
+                console.log(`[NOTION] ✅ Set multi_select: ${propName} = ${matchingMulti.name}`);
+              } else {
+                console.log(`[NOTION] ⚠️ Value "${value}" not found in multi_select options for ${propName}`);
+                console.log(`[NOTION] Available options: ${multiOptions.map(opt => opt.name).join(', ')}`);
+              }
+              break;
+
+            case 'status':
+              const statusOptions = propConfig.status?.options || [];
+              const matchingStatus = statusOptions.find(opt => 
+                opt.name === value || opt.name.toLowerCase() === value.toLowerCase()
+              );
+              
+              if (matchingStatus) {
+                notionProperties[propName] = { status: { name: matchingStatus.name } };
+                console.log(`[NOTION] ✅ Set status: ${propName} = ${matchingStatus.name}`);
+              } else {
+                console.log(`[NOTION] ⚠️ Value "${value}" not found in status options for ${propName}`);
+                console.log(`[NOTION] Available options: ${statusOptions.map(opt => opt.name).join(', ')}`);
+                // デフォルト値を使用
+                if (statusOptions.length > 0) {
+                  notionProperties[propName] = { status: { name: statusOptions[0].name } };
+                  console.log(`[NOTION] ✅ Using default: ${propName} = ${statusOptions[0].name}`);
+                }
+              }
+              break;
+
+            case 'date':
+              if (propName === '記入日') {
+                notionProperties[propName] = { date: { start: today } };
+                console.log(`[NOTION] ✅ Set date: ${propName} = ${today}`);
+              } else if (value && typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                notionProperties[propName] = { date: { start: value } };
+                console.log(`[NOTION] ✅ Set date: ${propName} = ${value}`);
+              }
+              break;
+
+            case 'rich_text':
+              notionProperties[propName] = {
+                rich_text: [{ text: { content: value.toString() } }]
+              };
+              console.log(`[NOTION] ✅ Set rich_text: ${propName} = ${value}`);
+              break;
+
+            case 'number':
+              if (!isNaN(value)) {
+                notionProperties[propName] = { number: Number(value) };
+                console.log(`[NOTION] ✅ Set number: ${propName} = ${value}`);
+              }
+              break;
+
+            default:
+              console.log(`[NOTION] ⚠️ Unsupported property type: ${propConfig.type} for ${propName}`);
+          }
+        } catch (propError) {
+          console.error(`[NOTION] ❌ Error setting property ${propName}:`, propError.message);
         }
       }
 
-      // 期限（日付がある場合）
-      if (properties.期限 && typeof properties.期限 === 'string' && properties.期限.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        notionProperties['期限'] = { date: { start: properties.期限 } };
-      }
+      console.log('[NOTION] Final properties to send:');
+      console.log(JSON.stringify(notionProperties, null, 2));
 
-      console.log('[NOTION] Properties to send:', JSON.stringify(notionProperties, null, 2));
-      
+      // ページを作成
       const response = await this.client.pages.create({
         parent: { database_id: this.databaseId },
         properties: notionProperties,
         children: wbsToBlocks(pageContent)
       });
+
+      console.log('[NOTION] ✅ Page created successfully!');
+      console.log(`[NOTION] Page ID: ${response.id}`);
+      console.log(`[NOTION] Page URL: ${response.url}`);
       
-      console.log('[NOTION] Page created successfully:', response.id);
-      console.log('[NOTION] Page URL:', response.url);
       return response;
-      
+
     } catch (error) {
-      console.error('[NOTION] API Error in createPageFromAnalysis:', error);
+      console.error('[NOTION] ❌ Error in createPageFromAnalysis:', error.message);
       
-      // Notion APIエラーの詳細を解析
-      if (error.body) {
-        console.error('[NOTION] Error body:', JSON.stringify(error.body, null, 2));
-        
-        // プロパティ関連のエラーの場合、より詳細な情報を提供
-        if (error.body.message && error.body.message.includes('expected to be')) {
-          console.error('[NOTION] Property validation error detected');
-          
-          // データベース構造を取得してデバッグ情報を出力
-          try {
-            const database = await this.client.databases.retrieve({
-              database_id: this.databaseId
-            });
-            
-            console.log('[NOTION] Available database properties:');
-            Object.entries(database.properties).forEach(([key, prop]) => {
-              console.log(`  - ${key}: ${prop.type}`);
-              if (prop.type === 'select' && prop.select?.options) {
-                console.log(`    Select options: ${prop.select.options.map(opt => opt.name).join(', ')}`);
-              }
-              if (prop.type === 'multi_select' && prop.multi_select?.options) {
-                console.log(`    Multi-select options: ${prop.multi_select.options.map(opt => opt.name).join(', ')}`);
-              }
-            });
-          } catch (dbError) {
-            console.error('[NOTION] Could not retrieve database structure:', dbError.message);
-          }
-          
-          // フォールバック：最小限のプロパティでページを作成
-          return await this.createMinimalPage(analysisResult);
-        }
+      if (error.code === 'validation_error') {
+        console.log('[NOTION] 🔄 Attempting fallback page creation...');
+        return await this.createFallbackPage(analysisResult);
       }
       
-      throw new Error('Notionへのページ作成に失敗しました: ' + (error.body?.message || error.message));
+      throw new Error(`Notionページの作成に失敗しました: ${error.message}`);
     }
   }
 
-  // フォールバック用の最小限ページ作成
-  async createMinimalPage(analysisResult) {
+  async createFallbackPage(analysisResult) {
     try {
-      console.log('[NOTION] Creating minimal page as fallback...');
+      console.log('[NOTION] Creating fallback page with minimal properties...');
       
       const { properties, pageContent } = analysisResult;
+      const schema = await this.getDatabaseSchema();
       
-      const minimalProperties = {
-        'Name': { 
-          title: [{ text: { content: properties.Name || 'Untitled' } }] 
-        }
-      };
+      // 最小限のプロパティ（タイトルと記入日のみ）
+      const fallbackProperties = {};
+      
+      // タイトル
+      const titleProperty = Object.keys(schema).find(key => schema[key].type === 'title');
+      if (titleProperty) {
+        fallbackProperties[titleProperty] = {
+          title: [{ text: { content: properties.Name || 'Untitled' } }]
+        };
+      }
 
-      // 記入日のみ設定
+      // 記入日
       const today = new Date().toISOString().split('T')[0];
-      minimalProperties['記入日'] = { 
-        date: { start: today } 
-      };
+      if (schema['記入日'] && schema['記入日'].type === 'date') {
+        fallbackProperties['記入日'] = { date: { start: today } };
+      }
 
       const response = await this.client.pages.create({
         parent: { database_id: this.databaseId },
-        properties: minimalProperties,
+        properties: fallbackProperties,
         children: [
           {
             object: 'block',
             type: 'heading_2',
-            heading_2: {
-              rich_text: [{ type: 'text', text: { content: '解析結果' } }]
-            }
+            heading_2: { rich_text: [{ type: 'text', text: { content: '解析結果' } }] }
           },
           {
             object: 'block',
@@ -200,7 +281,7 @@ class NotionService {
             paragraph: {
               rich_text: [{ 
                 type: 'text', 
-                text: { content: `ステータス: ${properties.ステータス || '未設定'}` } 
+                text: { content: `📝 解析内容: ${properties.Name}` } 
               }]
             }
           },
@@ -210,7 +291,7 @@ class NotionService {
             paragraph: {
               rich_text: [{ 
                 type: 'text', 
-                text: { content: `種別: ${properties.種別 || '未設定'}` } 
+                text: { content: `📊 ステータス: ${properties.ステータス || '未設定'}` } 
               }]
             }
           },
@@ -220,65 +301,32 @@ class NotionService {
             paragraph: {
               rich_text: [{ 
                 type: 'text', 
-                text: { content: `優先度: ${properties.優先度 || '未設定'}` } 
+                text: { content: `🏷️ 種別: ${properties.種別 || '未設定'}` } 
               }]
             }
           },
           ...wbsToBlocks(pageContent)
         ]
       });
-      
-      console.log('[NOTION] Minimal page created successfully:', response.id);
+
+      console.log('[NOTION] ✅ Fallback page created successfully!');
       return response;
-      
+
     } catch (fallbackError) {
-      console.error('[NOTION] Fallback page creation also failed:', fallbackError);
-      throw new Error('Notionページの作成に完全に失敗しました: ' + fallbackError.message);
+      console.error('[NOTION] ❌ Fallback creation also failed:', fallbackError.message);
+      throw new Error(`Notionページの作成に完全に失敗しました: ${fallbackError.message}`);
     }
   }
 
   async testConnection() {
     try {
       console.log('[NOTION] Testing connection...');
-      console.log('[NOTION] Using database ID:', this.databaseId);
-      
-      const response = await this.client.databases.retrieve({
-        database_id: this.databaseId
-      });
-      
-      console.log('[NOTION] Connection successful!');
-      console.log('[NOTION] Database info:', {
-        id: response.id,
-        title: response.title[0]?.plain_text || 'Untitled',
-        created_time: response.created_time,
-        last_edited_time: response.last_edited_time
-      });
-      
-      console.log('[NOTION] Database properties:');
-      Object.entries(response.properties).forEach(([key, prop]) => {
-        console.log(`  - ${key}: ${prop.type}`);
-        if (prop.type === 'select' && prop.select?.options) {
-          console.log(`    Options: ${prop.select.options.map(opt => opt.name).join(', ')}`);
-        }
-        if (prop.type === 'multi_select' && prop.multi_select?.options) {
-          console.log(`    Options: ${prop.multi_select.options.map(opt => opt.name).join(', ')}`);
-        }
-      });
-      
+      await this.getDatabaseSchema();
+      console.log('[NOTION] ✅ Connection test successful!');
       return true;
     } catch (error) {
-      console.error('[NOTION] Connection error:', {
-        code: error.code,
-        message: error.message,
-        status: error.status
-      });
-      
-      if (error.code === 'unauthorized') {
-        throw new Error('APIキーが無効です。インテグレーションシークレットを確認してください。');
-      } else if (error.code === 'object_not_found') {
-        throw new Error('データベースが見つかりません。データベースIDとアクセス権限を確認してください。');
-      }
-      throw new Error(`Notionとの接続に失敗しました: ${error.message}`);
+      console.error('[NOTION] ❌ Connection test failed:', error.message);
+      throw error;
     }
   }
 }
