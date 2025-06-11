@@ -105,15 +105,17 @@ class NotionService {
       
       // 各プロパティを動的にマッピング（新しいテーブル構造に対応）
       const valueMap = {
-        'ステータス': properties.ステータス || '未分類',
-        '種別': properties.種別 || 'その他・雑務',
-        '優先度': properties.優先度 || '普通',
-        '成果物': properties.成果物 || 'その他',
-        'レベル': properties.レベル || 'タスク',
-        '案件': properties.案件 || 'その他',
-        '担当者': properties.担当者 || '自分',
-        '記入日': today
+        '記入日': today,
+        'ステータス': properties.ステータス || '📥 未分類'  // ステータスは常に設定
       };
+
+      // nullでない場合のみvalueMapに追加（ステータス以外）
+      if (properties.種別) valueMap['種別'] = properties.種別;
+      if (properties.優先度) valueMap['優先度'] = properties.優先度;
+      if (properties.成果物) valueMap['成果物'] = properties.成果物;
+      if (properties.レベル) valueMap['レベル'] = properties.レベル;
+      if (properties.案件) valueMap['案件'] = properties.案件;
+      if (properties.担当者) valueMap['担当者'] = properties.担当者;
 
       // 期限が指定されている場合は追加
       if (properties.期限 && properties.期限 !== 'YYYY-MM-DD' && properties.期限 !== null) {
@@ -373,20 +375,28 @@ class NotionService {
       Object.entries(properties).forEach(([propName, propData]) => {
         switch (propData.type) {
           case 'select':
-            result[propName] = propData.select?.name || '未設定';
+            if (propName === 'ステータス') {
+              result[propName] = propData.select?.name || '📥 未分類';
+            } else {
+              result[propName] = propData.select?.name || null;
+            }
             break;
           case 'date':
             if (propData.date?.start) {
               result[propName] = propData.date.start;
             } else {
-              result[propName] = '未設定';
+              result[propName] = null;
             }
             break;
           case 'rich_text':
-            result[propName] = propData.rich_text?.[0]?.text?.content || '未設定';
+            result[propName] = propData.rich_text?.[0]?.text?.content || null;
             break;
           default:
-            result[propName] = '未設定';
+            if (propName === 'ステータス') {
+              result[propName] = '📥 未分類';
+            } else {
+              result[propName] = null;
+            }
         }
       });
 

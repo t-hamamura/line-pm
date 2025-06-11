@@ -16,24 +16,27 @@ class ProjectAnalyzer {
 
 # 指示
 - ユーザーのテキストから、以下のプロパティを推測して設定してください。
+- **重要**: テキストから明確に読み取れない項目は、無理に推測せずにnullを設定してください。
 - テキストがプロジェクトや複数のステップを含むタスクの場合、具体的なアクションプランをWBS（作業分解構成図）として箇条書きで生成し、pageContentに格納してください。
 - テキストが単純なメモや単一のアクションの場合は、pageContentにはその内容を簡潔にまとめた文章を入れてください。
 - JSON以外の余計な文字列（例: \`\`\`json ... \`\`\`）は出力に含めないでください。
 - プロジェクト名はユーザーの入力テキストをそのまま設定してください。
+- WBS案は必ず生成し、LINEでユーザーに提示します。
 
 # 出力JSONフォーマット
 {
   "properties": {
-    "ステータス": "未分類",
-    "種別": "企画・戦略",
-    "優先度": "普通",
-    "期限": "YYYY-MM-DD (不明な場合はnull)",
-    "成果物": "資料・企画書",
-    "レベル": "タスク",
-    "案件": "その他",
-    "担当者": "自分"
+    "ステータス": "📥 未分類",
+    "種別": null,
+    "優先度": null,
+    "期限": null,
+    "成果物": null,
+    "レベル": null,
+    "案件": null,
+    "担当者": null
   },
-  "pageContent": "WBSやメモの内容をMarkdown形式の文字列で記述"
+  "pageContent": "WBSやメモの内容をMarkdown形式の文字列で記述",
+  "wbsProposal": "LINEで提示するWBS案の文字列"
 }
 
 # 各プロパティの選択肢
@@ -152,8 +155,8 @@ class ProjectAnalyzer {
       // プロジェクト名を別途設定
       parsedResult.properties.Name = text;
       
-      // ステータスを必ず「未分類」に設定
-      parsedResult.properties.ステータス = "未分類";
+      // ステータスを必ず「📥 未分類」に設定
+      parsedResult.properties.ステータス = "📥 未分類";
 
       console.log('[GEMINI] Analyzed data:', JSON.stringify(parsedResult, null, 2));
       return parsedResult;
@@ -176,16 +179,17 @@ class ProjectAnalyzer {
     const analysis = {
       properties: {
         Name: text,
-        ステータス: "未分類",
-        種別: "その他・雑務",
-        優先度: "普通",
+        ステータス: "📥 未分類",
+        種別: null,
+        優先度: null,
         期限: null,
-        成果物: "その他",
-        レベル: text.length > 20 ? "タスク" : "アクション",
-        案件: "その他",
-        担当者: "自分"
+        成果物: null,
+        レベル: null,
+        案件: null,
+        担当者: null
       },
-      pageContent: `## 概要\n${text}\n\n## 次のアクション\n- 詳細を検討する\n- 必要なリソースを確認する\n- スケジュールを立てる`
+      pageContent: `## 概要\n${text}\n\n## 次のアクション\n- 詳細を検討する\n- 必要なリソースを確認する\n- スケジュールを立てる`,
+      wbsProposal: `📋 ${text}のWBS案:\n\n1. 要件整理・分析\n2. 計画策定\n3. 実行準備\n4. 実施・進捗管理\n5. 完了・振り返り`
     };
     
     console.log('[GEMINI] Fallback analysis created:', JSON.stringify(analysis, null, 2));

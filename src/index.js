@@ -154,14 +154,17 @@ async function handleEvent(event) {
       `🔗 URL: ${notionPage.url}`,
       ``,
       `📝 タイトル: ${actualProps.title || 'Untitled'}`,
-      `📋 ステータス: ${actualProps.ステータス || '未設定'}`,
-      `⭐ 優先度: ${actualProps.優先度 || '未設定'}`,
-      `🏷️ 種別: ${actualProps.種別 || '未設定'}`,
-      `🎚️ レベル: ${actualProps.レベル || '未設定'}`,
-      `📦 成果物: ${actualProps.成果物 || '未設定'}`,
-      `👤 担当者: ${actualProps.担当者 || '未設定'}`,
-      `🗓️ 期限: ${actualProps.期限 || '未設定'}`,
-      `💼 案件: ${actualProps.案件 || '未設定'}`
+      `📋 ステータス: ${actualProps.ステータス || '📥 未分類'}`,
+      `⭐ 優先度: ${actualProps.優先度 || '(空欄)'}`,
+      `🏷️ 種別: ${actualProps.種別 || '(空欄)'}`,
+      `🎚️ レベル: ${actualProps.レベル || '(空欄)'}`,
+      `📦 成果物: ${actualProps.成果物 || '(空欄)'}`,
+      `👤 担当者: ${actualProps.担当者 || '(空欄)'}`,
+      `🗓️ 期限: ${actualProps.期限 || '(空欄)'}`,
+      `💼 案件: ${actualProps.案件 || '(空欄)'}`,
+      ``,
+      `📋 WBS案:`,
+      `${analysisResult.wbsProposal || 'WBS案の生成に失敗しました'}`
     ];
 
     registrationDetails.push(``);
