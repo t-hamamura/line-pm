@@ -44,3 +44,6 @@ app.listen(PORT, () => {
   console.log("✅  Ready to receive LINE webhooks!");
   console.log("===================================");
 });
+
+// --- Railway のヘルスチェック対策 -------------
+app.get("/", (req, res) => res.status(200).send("OK"));
