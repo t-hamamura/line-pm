@@ -78,6 +78,18 @@ async function handleEvent(event) {
   const eventId = event.webhookEventId || `${event.source.userId}-${event.timestamp}`;
   const messageHash = `${event.source.userId}-${userText.trim()}-${Math.floor(Date.now() / 60000)}`; // 1分単位でハッシュ
 
+  const userText = event.message.text.trim(); // trimを追加
+  const userId = event.source.userId;
+  const eventId = event.webhookEventId || `${userId}-${event.timestamp}`;
+  const messageHash = `${userId}-${userText}-${Math.floor(Date.now() / 300000)}`; // 5分単位に変更
+  const emergencyKey = `${userId}-${userText}`; // 緊急重複防止用
+
+  // 緊急重複防止（この部分を追加）
+  if (processedEvents.has(emergencyKey)) {
+    console.log('[EMERGENCY] Duplicate message detected, skipping');
+    return Promise.resolve(null);
+  }
+  
   console.log(`[EVENT] Received text message: "${userText}"`);
   console.log(`[EVENT] Event ID: ${eventId}`);
   console.log(`[EVENT] Message hash: ${messageHash}`);
@@ -102,9 +114,11 @@ async function handleEvent(event) {
     return Promise.resolve(null);
   }
 
-  // 処理済みとしてマーク
-  processedEvents.set(eventId, Date.now());
-  processedEvents.set(messageHash, Date.now());
+  // 処理開始前に重複防止マークを設定（重要！）
+  const processingTimestamp = Date.now();
+  processedEvents.set(eventId, processingTimestamp);
+  processedEvents.set(messageHash, processingTimestamp);
+  processedEvents.set(emergencyKey, processingTimestamp); // 緊急キーも追加
 
   // サービスが利用できない場合の処理
   if (!projectAnalyzer || !notionService) {
@@ -177,6 +191,7 @@ async function handleEvent(event) {
     // エラーの場合は処理済みマークを削除（再試行可能にする）
     processedEvents.delete(eventId);
     processedEvents.delete(messageHash);
+    processedEvents.delete(emergencyKey); // 緊急キーも削除
     
     // エラーが発生したことをLINEに通知
     const errorMessage = {
