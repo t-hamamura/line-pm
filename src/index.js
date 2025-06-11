@@ -143,30 +143,30 @@ async function handleEvent(event) {
     console.log('[NOTION] Creating page...');
     const notionPage = await notionService.createPageFromAnalysis(analysisResult);
 
-    // 詳細な成功通知を作成
-    console.log(`[LINE] Creating detailed success message. Notion URL: ${notionPage.url}`);
-    
-    // 登録されたプロパティの情報を整理
-    const props = analysisResult.properties;
+    // 詳細な成功通知を作成（実際の値で）
+    console.log(`[LINE] Creating success message with actual Notion values`);
+
+    // Notionに実際に登録された値を取得
+    const actualProps = await notionService.getPageProperties(notionPage.id);
     const registrationDetails = [
       `📄 ページが作成されました！`,
       ``,
       `🔗 URL: ${notionPage.url}`,
       ``,
       `📊 登録情報:`,
-      `┃ 📝 タイトル: ${props.Name || 'Untitled'}`,
-      `┃ 📋 ステータス: ${props.ステータス || '未設定'}`,
-      `┃ 🏷️ 種別: ${props.種別 || '未設定'}`,
-      `┃ ⭐ 優先度: ${props.優先度 || '未設定'}`,
-      `┃ 📦 成果物: ${props.成果物 || '未設定'}`,
-      `┃ 🎚️ レベル: ${props.レベル || '未設定'}`,
-      `┃ 💼 案件: ${props.案件 || '未設定'}`,
-      `┃ 👤 担当者: ${props.担当者 || '未設定'}`
+      `┃ 📝 タイトル: ${actualProps.title || 'Untitled'}`,
+      `┃ 📋 ステータス: ${actualProps.ステータス || '未設定'}`,
+      `┃ 🏷️ 種別: ${actualProps.種別 || '未設定'}`,
+      `┃ ⭐ 優先度: ${actualProps.優先度 || '未設定'}`,
+      `┃ 📦 成果物: ${actualProps.成果物 || '未設定'}`,
+      `┃ 🎚️ レベル: ${actualProps.レベル || '未設定'}`,
+      `┃ 💼 案件: ${actualProps.案件 || '未設定'}`,
+      `┃ 👤 担当者: ${actualProps.担当者 || '未設定'}`
     ];
 
     // 期限が設定されている場合は追加
-    if (props.期限 && props.期限 !== 'YYYY-MM-DD' && props.期限 !== null) {
-      registrationDetails.push(`┃ ⏰ 期限: ${props.期限}`);
+    if (actualProps.期限 && actualProps.期限 !== '未設定') {
+      registrationDetails.push(`┃ ⏰ 期限: ${actualProps.期限}`);
     }
 
     registrationDetails.push(``);
