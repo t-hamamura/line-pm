@@ -343,7 +343,7 @@ class NotionService {
     }
   }
 
-  // ヘルスチェック用メソッド
+// ヘルスチェック用メソッド
   getHealthStatus() {
     return {
       status: this.databaseSchema ? 'healthy' : 'unknown',
@@ -352,9 +352,8 @@ class NotionService {
       schemaLoaded: !!this.databaseSchema
     };
   }
-}
 
-// 作成されたページの実際の値を取得する機能
+  // 🔧 ここに正しく追加
   async getPageProperties(pageId) {
     try {
       console.log(`[NOTION] 実際の値を確認中: ${pageId}`);
@@ -409,4 +408,6 @@ class NotionService {
     }
   }
 
-module.exports = new NotionService();
+} // ← class の閉じ括弧
+
+module.exports = new NotionService(); // ← これは最後
