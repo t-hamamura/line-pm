@@ -74,10 +74,6 @@ async function handleEvent(event) {
     return Promise.resolve(null);
   }
 
-  const userText = event.message.text;
-  const eventId = event.webhookEventId || `${event.source.userId}-${event.timestamp}`;
-  const messageHash = `${event.source.userId}-${userText.trim()}-${Math.floor(Date.now() / 60000)}`; // 1分単位でハッシュ
-
   const userText = event.message.text.trim(); // trimを追加
   const userId = event.source.userId;
   const eventId = event.webhookEventId || `${userId}-${event.timestamp}`;
