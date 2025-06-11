@@ -1,44 +1,120 @@
 const { Client } = require('@notionhq/client');
 
 /**
- * Markdown形式のWBS文字列をNotionのブロックオブジェクトに変換します。
+ * Markdown形式のテキストをNotionのブロックオブジェクトに変換します。
+ * @param {string} markdownText - Markdown形式のテキスト。
+ * @returns {Array} Notion APIのブロックオブジェクトの配列。
  */
-function wbsToBlocks(wbsText) {
-  if (!wbsText || typeof wbsText !== 'string' || wbsText.trim() === '') {
-    return [];
+function markdownToBlocks(markdownText) {
+  if (!markdownText || typeof markdownText !== 'string' || markdownText.trim() === '') {
+    console.log('📝 Empty or invalid markdown content, creating default block');
+    return [{
+      object: 'block',
+      type: 'paragraph',
+      paragraph: {
+        rich_text: [{ type: 'text', text: { content: '内容が自動生成されませんでした。詳細は手動で追加してください。' } }]
+      }
+    }];
   }
 
-  const blocks = [{
-    object: 'block',
-    type: 'heading_2',
-    heading_2: {
-      rich_text: [{ type: 'text', text: { content: 'WBS案' } }]
-    }
-  }];
-
-  wbsText.split('\n').forEach(line => {
+  console.log('📝 Converting markdown to Notion blocks...');
+  console.log('Input markdown length:', markdownText.length);
+  
+  const blocks = [];
+  const lines = markdownText.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmedLine = line.trim();
-    if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
-      const content = trimmedLine.substring(2);
-      if (content) {
-        blocks.push({
-          object: 'block',
-          type: 'bulleted_list_item',
-          bulleted_list_item: {
-            rich_text: [{ type: 'text', text: { content } }]
-          }
-        });
-      }
-    } else if (trimmedLine) {
-       blocks.push({
-         object: 'block',
-         type: 'paragraph',
-         paragraph: {
-            rich_text: [{ type: 'text', text: { content: trimmedLine } }]
-         }
-       });
+    
+    if (!trimmedLine) {
+      continue;
     }
-  });
+    
+    // ## 見出し2
+    if (trimmedLine.startsWith('## ')) {
+      const text = trimmedLine.substring(3).trim();
+      blocks.push({
+        object: 'block',
+        type: 'heading_2',
+        heading_2: {
+          rich_text: [{ type: 'text', text: { content: text } }]
+        }
+      });
+    }
+    // ### 見出し3
+    else if (trimmedLine.startsWith('### ')) {
+      const text = trimmedLine.substring(4).trim();
+      blocks.push({
+        object: 'block',
+        type: 'heading_3',
+        heading_3: {
+          rich_text: [{ type: 'text', text: { content: text } }]
+        }
+      });
+    }
+    // #### 見出し4（小見出し）
+    else if (trimmedLine.startsWith('#### ')) {
+      const text = trimmedLine.substring(5).trim();
+      blocks.push({
+        object: 'block',
+        type: 'heading_3',
+        heading_3: {
+          rich_text: [{ 
+            type: 'text', 
+            text: { content: text },
+            annotations: { bold: true }
+          }]
+        }
+      });
+    }
+    // - [ ] チェックリスト
+    else if (trimmedLine.startsWith('- [ ] ')) {
+      const text = trimmedLine.substring(6).trim();
+      blocks.push({
+        object: 'block',
+        type: 'to_do',
+        to_do: {
+          rich_text: [{ type: 'text', text: { content: text } }],
+          checked: false
+        }
+      });
+    }
+    // 1. 番号付きリスト
+    else if (trimmedLine.match(/^\d+\. /)) {
+      const text = trimmedLine.replace(/^\d+\. /, '').trim();
+      blocks.push({
+        object: 'block',
+        type: 'numbered_list_item',
+        numbered_list_item: {
+          rich_text: [{ type: 'text', text: { content: text } }]
+        }
+      });
+    }
+    // - 箇条書きリスト
+    else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
+      const text = trimmedLine.substring(2).trim();
+      blocks.push({
+        object: 'block',
+        type: 'bulleted_list_item',
+        bulleted_list_item: {
+          rich_text: [{ type: 'text', text: { content: text } }]
+        }
+      });
+    }
+    // 通常の段落
+    else {
+      blocks.push({
+        object: 'block',
+        type: 'paragraph',
+        paragraph: {
+          rich_text: [{ type: 'text', text: { content: trimmedLine } }]
+        }
+      });
+    }
+  }
+  
+  console.log(`📝 Converted to ${blocks.length} Notion blocks`);
   return blocks;
 }
 
@@ -233,7 +309,7 @@ class NotionService {
       const response = await this.client.pages.create({
         parent: { database_id: this.databaseId },
         properties: notionProperties,
-        children: wbsToBlocks(pageContent)
+        children: markdownToBlocks(pageContent)
       });
 
       console.log('[NOTION] ✅ Page created successfully!');
@@ -317,7 +393,7 @@ class NotionService {
               }]
             }
           },
-          ...wbsToBlocks(pageContent)
+          ...markdownToBlocks(pageContent)
         ]
       });
 
