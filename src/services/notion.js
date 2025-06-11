@@ -354,4 +354,59 @@ class NotionService {
   }
 }
 
+// 作成されたページの実際の値を取得する機能
+  async getPageProperties(pageId) {
+    try {
+      console.log(`[NOTION] 実際の値を確認中: ${pageId}`);
+      
+      const page = await this.client.pages.retrieve({
+        page_id: pageId
+      });
+
+      const properties = page.properties;
+      const result = {};
+
+      // タイトル
+      const titleProp = Object.values(properties).find(prop => prop.type === 'title');
+      result.title = titleProp?.title?.[0]?.text?.content || '';
+
+      // 各プロパティの実際の値を取得
+      Object.entries(properties).forEach(([propName, propData]) => {
+        switch (propData.type) {
+          case 'select':
+            result[propName] = propData.select?.name || '未設定';
+            break;
+          case 'date':
+            if (propData.date?.start) {
+              result[propName] = propData.date.start;
+            } else {
+              result[propName] = '未設定';
+            }
+            break;
+          case 'rich_text':
+            result[propName] = propData.rich_text?.[0]?.text?.content || '未設定';
+            break;
+          default:
+            result[propName] = '未設定';
+        }
+      });
+
+      console.log('[NOTION] 実際の登録値:', JSON.stringify(result, null, 2));
+      return result;
+
+    } catch (error) {
+      console.error('[NOTION] 値の確認でエラー:', error.message);
+      return {
+        title: '確認失敗',
+        ステータス: '未設定',
+        種別: '未設定',
+        優先度: '未設定',
+        成果物: '未設定',
+        レベル: '未設定',
+        案件: '未設定',
+        担当者: '未設定'
+      };
+    }
+  }
+
 module.exports = new NotionService();
