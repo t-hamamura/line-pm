@@ -49,3 +49,11 @@ app.listen(PORT, () => {
   console.log('✅  Ready for LINE webhooks!');
   console.log('===============================');
 });
+
+// --- keep-alive ---------------------------------
+// 5分おきに自分自身を GET して Railway に「生きている」ことを通知
+if (process.env.KEEP_ALIVE_URL) {
+  setInterval(() => {
+    fetch(process.env.KEEP_ALIVE_URL).catch(() => {});
+  }, 1000 * 60 * 5);
+}
