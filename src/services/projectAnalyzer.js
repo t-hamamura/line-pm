@@ -11,16 +11,8 @@ class ProjectAnalyzer {
   async analyzeText(text) {
     try {
       const systemPrompt = `
-あなたはプロジェクト管理AIアシスタントです。
-ユーザーからのテキスト入力を解釈し、Notionデータベースに登録するためのJSONオブジェクトを生成してください。
+テキスト「${text}」を解析してJSONのみ出力:
 
-# 重要なルール
-- **推測は一切禁止**: テキストに明記されていない項目は必ずnullにしてください
-- **ステータスのみ例外**: 「📥 未分類」を必ず設定
-- **WBS案作成**: プロジェクトの作業分解構成図を作成してください
-- **JSON形式**: 余計な文字列は含めず、JSONのみ出力
-
-# 出力JSONフォーマット
 {
   "properties": {
     "ステータス": "📥 未分類",
@@ -32,37 +24,36 @@ class ProjectAnalyzer {
     "案件": null,
     "担当者": null
   },
-  "pageContent": "WBS作業分解構成図（Notion用詳細版）",
-  "wbsProposal": "WBS作業分解構成図（LINE用簡潔版）"
+  "pageContent": "WBS案の詳細説明",
+  "wbsProposal": "WBS案の簡潔版"
 }
 
-# 具体例（推測禁止の徹底）
-
-例1: "新しいプロジェクトを考える"
-→ 全ての項目をnullに設定（「新しい」「プロジェクト」「考える」だけでは具体的な分類不可）
-
-例2: "マーケティング戦略を12月15日までに緊急で作成する"
-→ 期限: "2024-12-15", 優先度: "🔥緊急" のみ設定（他はnull）
-
-例3: "LP制作"
-→ 全ての項目をnullに設定（「LP」だけでは詳細不明）
-
-ユーザー入力テキスト「${text}」を解析し、上記の原則に従ってJSONオブジェクトのみを出力してください。
+ルール: テキストに明記されていない項目はnull。期限は「YYYY-MM-DD」形式。優先度は「🔥緊急」「⭐️重要」「📅普通」「💭アイデア」のみ。
 `;
 
-      // 最新のGemini 1.5 Flashモデルを使用
+      // 最新・最安・最速モデルに変更
       const model = this.gemini.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-flash-8b",
         generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024,
+          temperature: 0.3,        // 推測禁止なので低温度で一貫性重視
+          topK: 20,               // 候補を絞って高速化
+          topP: 0.8,              // 精度と速度のバランス
+          maxOutputTokens: 512,   // WBS案が短縮されたので半分に
         }
       });
       
-      console.log('[GEMINI] Using model: gemini-1.5-flash');
-      const result = await model.generateContent(systemPrompt);
+      console.log('[GEMINI] Using model: gemini-1.5-flash-8b (最新・最安・最速)');
+      
+      // タイムアウト処理（5秒）
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Gemini timeout')), 5000)
+      );
+      
+      const result = await Promise.race([
+        model.generateContent(systemPrompt),
+        timeoutPromise
+      ]);
+      
       const response = await result.response;
       const jsonString = response.text();
       
@@ -92,35 +83,50 @@ class ProjectAnalyzer {
     } catch (error) {
       console.error('[GEMINI] Error details:', error);
       
-      // Geminiエラーの場合は、フォールバック処理
-      if (error.message.includes('GoogleGenerativeAI') || error.message.includes('404')) {
-        console.log('[GEMINI] Using fallback analysis due to API error');
-        return this.createFallbackAnalysis(text);
-      }
-      
-      throw new Error('プロジェクト情報の解析に失敗しました: ' + error.message);
+      // 任意のエラーでフォールバック（パフォーマンス重視）
+      console.log('[GEMINI] Using fallback analysis for faster response');
+      return this.createFallbackAnalysis(text);
     }
   }
 
-  // フォールバック用の簡易解析
+  // 高速フォールバック処理（簡易パターンマッチング）
   createFallbackAnalysis(text) {
+    const lowerText = text.toLowerCase();
+    
+    // 簡易的な期限検出
+    let deadline = null;
+    const dateMatch = text.match(/(\d{1,2})[月/](\d{1,2})[日]?|\d{4}[-/](\d{1,2})[-/](\d{1,2})/);
+    if (dateMatch) {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = dateMatch[1] || dateMatch[3];
+      const day = dateMatch[2] || dateMatch[4];
+      deadline = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    
+    // 簡易的な優先度検出
+    let priority = null;
+    if (lowerText.includes('緊急') || lowerText.includes('急ぎ')) priority = "🔥緊急";
+    else if (lowerText.includes('重要')) priority = "⭐️重要";
+    else if (lowerText.includes('アイデア')) priority = "💭アイデア";
+    
     const analysis = {
       properties: {
         Name: text,
         ステータス: "📥 未分類",
         種別: null,
-        優先度: null,
-        期限: null,
+        優先度: priority,
+        期限: deadline,
         成果物: null,
         レベル: null,
         案件: null,
         担当者: null
       },
-      pageContent: `## 概要\n${text}\n\n## 次のアクション\n- 詳細を検討する\n- 必要なリソースを確認する\n- スケジュールを立てる`,
-      wbsProposal: `📋 ${text}のWBS案:\n\n1. 要件整理・分析\n2. 計画策定\n3. 実行準備\n4. 実施・進捗管理\n5. 完了・振り返り`
+      pageContent: `## ${text}\n\n### 実行ステップ\n1. 要件の整理\n2. 計画の策定\n3. 実行・管理\n4. 完了・振り返り`,
+      wbsProposal: `📋 ${text.substring(0, 20)}${text.length > 20 ? '...' : ''}のWBS案:\n\n1. 要件整理・分析\n2. 計画策定\n3. 実行準備\n4. 実施・管理\n5. 完了・振り返り`
     };
     
-    console.log('[GEMINI] Fallback analysis created:', JSON.stringify(analysis, null, 2));
+    console.log('[GEMINI] Fast fallback analysis:', JSON.stringify(analysis, null, 2));
     return analysis;
   }
 
