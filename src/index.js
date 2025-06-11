@@ -133,15 +133,43 @@ async function handleEvent(event) {
     console.log('[NOTION] Creating page...');
     const notionPage = await notionService.createPageFromAnalysis(analysisResult);
 
-    // 成功をLINEに通知
-    console.log(`[LINE] Replying with success message. Notion URL: ${notionPage.url}`);
+    // 詳細な成功通知を作成
+    console.log(`[LINE] Creating detailed success message. Notion URL: ${notionPage.url}`);
+    
+    // 登録されたプロパティの情報を整理
+    const props = analysisResult.properties;
+    const registrationDetails = [
+      `📄 ページが作成されました！`,
+      ``,
+      `🔗 URL: ${notionPage.url}`,
+      ``,
+      `📊 登録情報:`,
+      `┃ 📝 タイトル: ${props.Name || 'Untitled'}`,
+      `┃ 📋 ステータス: ${props.ステータス || '未設定'}`,
+      `┃ 🏷️ 種別: ${props.種別 || '未設定'}`,
+      `┃ ⭐ 優先度: ${props.優先度 || '未設定'}`,
+      `┃ 🎯 フェーズ: ${props.フェーズ || '未設定'}`,
+      `┃ 👤 担当者: ${props.担当者 || '未設定'}`,
+      `┃ 📦 成果物: ${props.成果物 || '未設定'}`,
+      `┃ 🎚️ レベル: ${props.レベル || '未設定'}`
+    ];
+
+    // 期限が設定されている場合は追加
+    if (props.期限 && props.期限 !== 'YYYY-MM-DD' && props.期限 !== null) {
+      registrationDetails.push(`┃ ⏰ 期限: ${props.期限}`);
+    }
+
+    registrationDetails.push(``);
+    registrationDetails.push(`🎉 プロジェクト管理の準備が整いました！`);
+
     const replyMessage = {
       type: 'text',
-      text: `✅ Notionにページを作成しました！\n\n📄 ページ: ${notionPage.url}\n\n🔸 レベル: ${analysisResult.properties.レベル || 'タスク'}\n🔸 種別: ${analysisResult.properties.種別 || 'メモ'}`
+      text: registrationDetails.join('\n')
     };
+
     await lineClient.replyMessage(event.replyToken, replyMessage);
 
-    console.log('[SUCCESS] Event processed successfully');
+    console.log('[SUCCESS] Event processed successfully with detailed notification');
 
   } catch (error) {
     console.error('[ERROR] Failed to handle event:', error);
