@@ -26,9 +26,19 @@ let lineClient;
 let projectAnalyzer;
 let notionService;
 
-// 重複防止用のキャッシュ
-const processedMessages = new Map();
-const CACHE_EXPIRY = 5 * 60 * 1000; // 5分
+// 重複防止用のメモリキャッシュ（簡易実装）
+const processedEvents = new Map();
+const CACHE_DURATION = 5 * 60 * 1000; // 5分
+
+// 定期的にキャッシュをクリーンアップ
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamp] of processedEvents.entries()) {
+    if (now - timestamp > CACHE_DURATION) {
+      processedEvents.delete(key);
+    }
+  }
+}, 60 * 1000); // 1分ごとにクリーンアップ
 
 try {
     lineClient = new Client(lineConfig);
@@ -55,37 +65,7 @@ try {
     notionService = null;
 }
 
-// --- 2. 重複チェック関数 ---
-
-function isDuplicateMessage(userId, messageText, timestamp) {
-  const key = `${userId}_${messageText}`;
-  const now = Date.now();
-  
-  // 古いキャッシュをクリーンアップ
-  for (const [cacheKey, cacheData] of processedMessages.entries()) {
-    if (now - cacheData.timestamp > CACHE_EXPIRY) {
-      processedMessages.delete(cacheKey);
-    }
-  }
-  
-  // 重複チェック
-  if (processedMessages.has(key)) {
-    const lastProcessed = processedMessages.get(key);
-    const timeDiff = now - lastProcessed.timestamp;
-    
-    if (timeDiff < CACHE_EXPIRY) {
-      console.log(`[DUPLICATE] Message already processed ${timeDiff}ms ago: "${messageText}"`);
-      return true;
-    }
-  }
-  
-  // 新しいメッセージとして記録
-  processedMessages.set(key, { timestamp: now });
-  console.log(`[NEW] Processing new message: "${messageText}"`);
-  return false;
-}
-
-// --- 3. メインの処理フローを定義 ---
+// --- 2. メインの処理フローを定義 ---
 
 async function handleEvent(event) {
   // テキストメッセージ以外、または空のメッセージは無視
@@ -95,17 +75,36 @@ async function handleEvent(event) {
   }
 
   const userText = event.message.text;
-  const userId = event.source.userId;
-  const timestamp = Date.now();
-  
-  console.log(`[EVENT] Received text message from ${userId}: "${userText}"`);
+  const eventId = event.webhookEventId || `${event.source.userId}-${event.timestamp}`;
+  const messageHash = `${event.source.userId}-${userText.trim()}-${Math.floor(Date.now() / 60000)}`; // 1分単位でハッシュ
+
+  console.log(`[EVENT] Received text message: "${userText}"`);
+  console.log(`[EVENT] Event ID: ${eventId}`);
+  console.log(`[EVENT] Message hash: ${messageHash}`);
 
   // 重複チェック
-  if (isDuplicateMessage(userId, userText, timestamp)) {
-    console.log('[SKIP] Duplicate message detected, skipping processing');
-    // 重複の場合は何もしない（LINEには応答しない）
+  if (processedEvents.has(eventId)) {
+    console.log(`[DUPLICATE] Event ${eventId} already processed, skipping`);
     return Promise.resolve(null);
   }
+
+  if (processedEvents.has(messageHash)) {
+    console.log(`[DUPLICATE] Similar message processed recently, skipping`);
+    // 重複の場合は簡単な通知のみ
+    try {
+      await lineClient.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '📝 同じような内容のメッセージを最近処理したため、重複を防ぐためスキップしました。'
+      });
+    } catch (replyError) {
+      console.error('[ERROR] Failed to send duplicate notification:', replyError);
+    }
+    return Promise.resolve(null);
+  }
+
+  // 処理済みとしてマーク
+  processedEvents.set(eventId, Date.now());
+  processedEvents.set(messageHash, Date.now());
 
   // サービスが利用できない場合の処理
   if (!projectAnalyzer || !notionService) {
@@ -123,41 +122,8 @@ async function handleEvent(event) {
   }
 
   try {
-    // 処理開始をLINEに通知（即座にレスポンス）
-    const processingMessage = {
-      type: 'text',
-      text: '📝 解析中です。少々お待ちください...'
-    };
-    
-    // すぐにレスポンスを返す
-    try {
-      await lineClient.replyMessage(event.replyToken, processingMessage);
-    } catch (replyError) {
-      console.error('[ERROR] Failed to send processing message:', replyError);
-    }
-
-    // バックグラウンドで実際の処理を実行
-    processMessageInBackground(userText, userId);
-
-  } catch (error) {
-    console.error('[ERROR] Failed to handle event:', error);
-    // 既にレスポンスが送信されているため、ここではpush messageを使用
-    const errorMessage = {
-      type: 'text',
-      text: `❌ エラーが発生しました。再度お試しください。\n\n詳細: ${error.message}`
-    };
-    try {
-      await lineClient.pushMessage(userId, errorMessage);
-    } catch (pushError) {
-      console.error('[ERROR] Failed to send error push message:', pushError);
-    }
-  }
-}
-
-// バックグラウンド処理
-async function processMessageInBackground(userText, userId) {
-  try {
-    console.log('[BACKGROUND] Starting background processing...');
+    // 処理開始の通知
+    console.log('[PROCESSING] Starting analysis and page creation...');
     
     // Geminiでテキストを解析
     console.log('[GEMINI] Analyzing text...');
@@ -168,28 +134,37 @@ async function processMessageInBackground(userText, userId) {
     const notionPage = await notionService.createPageFromAnalysis(analysisResult);
 
     // 成功をLINEに通知
-    console.log(`[SUCCESS] Process completed. Notion URL: ${notionPage.url}`);
-    const successMessage = {
+    console.log(`[LINE] Replying with success message. Notion URL: ${notionPage.url}`);
+    const replyMessage = {
       type: 'text',
-      text: `✅ Notionにページを作成しました！\n\n📄 ページ: ${notionPage.url}`
+      text: `✅ Notionにページを作成しました！\n\n📄 ページ: ${notionPage.url}\n\n🔸 レベル: ${analysisResult.properties.レベル || 'タスク'}\n🔸 種別: ${analysisResult.properties.種別 || 'メモ'}`
     };
-    await lineClient.pushMessage(userId, successMessage);
+    await lineClient.replyMessage(event.replyToken, replyMessage);
+
+    console.log('[SUCCESS] Event processed successfully');
 
   } catch (error) {
-    console.error('[BACKGROUND ERROR] Background processing failed:', error);
+    console.error('[ERROR] Failed to handle event:', error);
+    
+    // エラーの場合は処理済みマークを削除（再試行可能にする）
+    processedEvents.delete(eventId);
+    processedEvents.delete(messageHash);
+    
+    // エラーが発生したことをLINEに通知
     const errorMessage = {
       type: 'text',
-      text: `❌ 処理中にエラーが発生しました。\n再度お試しください。\n\n詳細: ${error.message}`
+      text: `❌ エラーが発生しました。\n大変お手数ですが、再度お試しください。\n\n詳細: ${error.message}`
     };
+    // エラー時はいつでもリプライできるとは限らないので、try-catchで囲む
     try {
-      await lineClient.pushMessage(userId, errorMessage);
-    } catch (pushError) {
-      console.error('[ERROR] Failed to send background error message:', pushError);
+      await lineClient.replyMessage(event.replyToken, errorMessage);
+    } catch (replyError) {
+      console.error('[ERROR] Failed to send error reply to LINE:', replyError);
     }
   }
 }
 
-// --- 4. Webhookエンドポイントの設定 ---
+// --- 3. Webhookエンドポイントの設定 ---
 
 // ルートパスへのアクセスはヘルスチェック用
 app.get("/", (req, res) => {
@@ -202,7 +177,21 @@ app.get("/", (req, res) => {
       projectAnalyzer: !!projectAnalyzer,
       notionService: !!notionService
     },
-    cacheSize: processedMessages.size
+    cache: {
+      processedEvents: processedEvents.size
+    }
+  });
+});
+
+// 処理済みイベントのクリア用エンドポイント（デバッグ用）
+app.post('/clear-cache', (req, res) => {
+  const previousSize = processedEvents.size;
+  processedEvents.clear();
+  console.log(`[CACHE] Cleared ${previousSize} processed events`);
+  res.json({ 
+    message: 'Cache cleared', 
+    previousSize, 
+    currentSize: processedEvents.size 
   });
 });
 
@@ -226,11 +215,11 @@ app.post('/webhook', (req, res) => {
 
     req.on('end', async () => {
       try {
-        console.log('[WEBHOOK] Processing request body...');
+        console.log('[WEBHOOK] Request body received');
         
         // 空のボディ（検証リクエスト）の場合
         if (!body || body.trim() === '') {
-          console.log('[WEBHOOK] Empty body - verification request');
+          console.log('[WEBHOOK] Empty body - this is a verification request');
           return res.status(200).send('OK');
         }
 
@@ -245,7 +234,7 @@ app.post('/webhook', (req, res) => {
 
         // 検証リクエストかどうかチェック
         if (!requestBody.events || requestBody.events.length === 0) {
-          console.log('[WEBHOOK] No events - verification request');
+          console.log('[WEBHOOK] No events - this is a verification request');
           return res.status(200).send('OK');
         }
 
@@ -259,33 +248,26 @@ app.post('/webhook', (req, res) => {
           return res.status(401).send('Invalid signature');
         }
 
-        // 先にレスポンスを返す（LINEのタイムアウト対策）
+        // イベント処理
+        console.log(`[WEBHOOK] Processing ${requestBody.events.length} events...`);
+        await Promise.all(requestBody.events.map(handleEvent));
+        
+        console.log('[WEBHOOK] Events processed successfully');
         res.status(200).send('OK');
-
-        // イベント処理（非同期）
-        console.log('[WEBHOOK] Starting event processing...');
-        Promise.all(requestBody.events.map(handleEvent))
-          .catch(error => {
-            console.error('[WEBHOOK] Error in event processing:', error);
-          });
         
       } catch (error) {
         console.error('[WEBHOOK] Error processing request:', error);
-        if (!res.headersSent) {
-          res.status(500).send('Internal Server Error');
-        }
+        res.status(500).send('Internal Server Error');
       }
     });
 
   } catch (error) {
     console.error('[WEBHOOK] Unexpected error:', error);
-    if (!res.headersSent) {
-      res.status(500).send('Internal Server Error');
-    }
+    res.status(500).send('Internal Server Error');
   }
 });
 
-// --- 5. エラーハンドリング ---
+// --- 4. エラーハンドリング ---
 
 // 404 ハンドラー
 app.use((req, res) => {
@@ -296,18 +278,16 @@ app.use((req, res) => {
 // エラーハンドラー
 app.use((error, req, res, next) => {
   console.error('[ERROR] Unhandled error:', error);
-  if (!res.headersSent) {
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+  res.status(500).json({ error: 'Internal Server Error' });
 });
 
-// --- 6. サーバーを起動 ---
+// --- 5. サーバーを起動 ---
 
 app.listen(PORT, () => {
   console.log('==================================================');
   console.log(`         🚀 Server running on port ${PORT}`);
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('  Ready to receive LINE webhook requests!');
-  console.log('  🛡️  Duplicate message protection enabled');
+  console.log('  ✨ Deduplication feature enabled');
   console.log('==================================================');
 });
