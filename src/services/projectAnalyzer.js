@@ -212,96 +212,104 @@ JSON形式で出力してください：`;
     }
   }
 
-  // 強化されたフォールバック応答
-  createEnhancedFallbackResponse(text) {
-    const textLower = text.toLowerCase();
-    
-    // 正確なNotionプロパティに基づく分析（半角空白含む）
-    let priority = null;
-    let type = null;
-    let level = null;
-    let deliverable = null;
-    let project = null;
-    let deadline = null;
-    
-    // 優先度判定（半角空白を含む正確な値）
-    if (textLower.includes('緊急') || textLower.includes('至急') || textLower.includes('急ぎ')) {
-      priority = "🔥 緊急";
-    } else if (textLower.includes('重要') || textLower.includes('大切')) {
-      priority = "⭐ 重要";
-    } else if (textLower.includes('アイデア')) {
-      priority = "💭 アイデア";
-    }
-    
-    // 種別判定（半角空白を含む正確な値）
-    if (textLower.includes('企画') || textLower.includes('戦略') || textLower.includes('計画')) {
-      type = "📋 企画・戦略";
-      deliverable = "📄 資料・企画書";
-    } else if (textLower.includes('制作') || textLower.includes('開発') || textLower.includes('作成')) {
-      type = "🛠 制作・開発";
-      deliverable = "🎨 コンテンツ";
-    } else if (textLower.includes('分析') || textLower.includes('調査') || textLower.includes('レポート')) {
-      type = "📊 分析・改善";
-      deliverable = "📈 レポート";
-    } else if (textLower.includes('実行') || textLower.includes('運用')) {
-      type = "🚀 実行・運用";
-    } else if (textLower.includes('管理') || textLower.includes('マネジメント')) {
-      type = "👥 マネジメント";
-    }
-    
-    // レベル判定（半角空白を含む正確な値）
-    if (textLower.includes('戦略')) {
-      level = "🏛 戦略レベル";
-    } else if (textLower.includes('プロジェクト')) {
-      level = "📂 プロジェクト";
-    } else if (textLower.includes('タスク')) {
-      level = "✅ タスク";
-    } else if (textLower.includes('メモ') || textLower.includes('アイデア')) {
-      level = "💭 メモ";
-    }
-    
-    // 案件判定（正確な値）
-    if (textLower.includes('ONEマーケ') || textLower.includes('マーケラボ')) {
-      project = "ONEマーケ／マーケラボ";
-    } else if (textLower.includes('redeal') || textLower.includes('リディアル') || textLower.includes('るい')) {
-      project = "るい／redeal.";
-    } else if (textLower.includes('アンズボーテ')) {
-      project = "アンズボーテ";
-    } else if (textLower.includes('池袋サンシャイン') || textLower.includes('サンシャイン')) {
-      project = "池袋サンシャイン美容外科";
-    } else if (textLower.includes('femuse') || textLower.includes('フェミューズ')) {
-      project = "femuse";
-    }
-    
-    // 期限抽出
-    const dateMatches = text.match(/(\d{1,2})月(\d{1,2})日|(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
-    if (dateMatches) {
-      if (dateMatches[1] && dateMatches[2]) {
-        const month = dateMatches[1].padStart(2, '0');
-        const day = dateMatches[2].padStart(2, '0');
-        deadline = `2023-${month}-${day}`;
-      } else if (dateMatches[3] && dateMatches[4] && dateMatches[5]) {
-        deadline = `${dateMatches[3]}-${dateMatches[4].padStart(2, '0')}-${dateMatches[5].padStart(2, '0')}`;
-      }
-    }
-
-    const fallbackResponse = {
-      properties: {
-        Name: text,
-        ステータス: "📥 未分類",
-        種別: type,
-        優先度: priority,
-        期限: deadline,
-        成果物: deliverable,
-        レベル: level,
-        案件: project
-      },
-      pageContent: this.generateWBS(text)
-    };
-
-    console.log('🔄 Using enhanced fallback response:', fallbackResponse);
-    return fallbackResponse;
+// 強化されたフォールバック応答
+createEnhancedFallbackResponse(text) {
+  const textLower = text.toLowerCase();
+  
+  // 正確なNotionプロパティに基づく分析（半角空白含む）
+  let priority = null;
+  let type = null;
+  level = null;
+  let deliverable = null;
+  let project = null;
+  let deadline = null;
+  
+  // 優先度判定 - 明確に緊急性が記載されている場合のみ
+  if (textLower.includes('緊急') || textLower.includes('至急') || textLower.includes('急ぎ')) {
+    priority = "🔥 緊急";
+  } else if (textLower.includes('重要') && !textLower.includes('重要な')) {
+    // 「重要な〜を作る」のような場合は除外し、「重要」単体の場合のみ
+    priority = "⭐ 重要";
   }
+  // アイデア判定は削除（推測すぎるため）
+  
+  // 種別判定 - より具体的で明確なキーワードの組み合わせのみ
+  if ((textLower.includes('マーケティング戦略') || textLower.includes('事業戦略') || textLower.includes('企画書')) && 
+      (textLower.includes('策定') || textLower.includes('立案'))) {
+    type = "📋 企画・戦略";
+    deliverable = "📄 資料・企画書";
+  } else if ((textLower.includes('webサイト') || textLower.includes('アプリ') || textLower.includes('システム')) && 
+             (textLower.includes('開発') || textLower.includes('構築'))) {
+    type = "🛠 制作・開発";
+    deliverable = "⚙ システム・ツール";
+  } else if ((textLower.includes('lp') || textLower.includes('ランディングページ') || textLower.includes('動画')) && 
+             textLower.includes('制作')) {
+    type = "🛠 制作・開発";
+    deliverable = "🎨 コンテンツ";
+  } else if ((textLower.includes('効果測定') || textLower.includes('データ分析') || textLower.includes('kpi分析')) && 
+             textLower.includes('レポート')) {
+    type = "📊 分析・改善";
+    deliverable = "📈 レポート";
+  } else if (textLower.includes('キャンペーン実行') || textLower.includes('広告運用')) {
+    type = "🚀 実行・運用";
+  } else if (textLower.includes('チーム管理') || textLower.includes('人事管理')) {
+    type = "👥 マネジメント";
+  }
+  // 単純な「作成」「企画」「計画」などの単語だけでは推測しない
+  
+  // レベル判定 - 明確に記載されている場合のみ
+  if (textLower.includes('戦略レベル') || (textLower.includes('戦略') && textLower.includes('全社'))) {
+    level = "🏛 戦略レベル";
+  } else if (textLower.includes('プロジェクト') && 
+             (textLower.includes('立ち上げ') || textLower.includes('新規') || textLower.includes('大型'))) {
+    level = "📂 プロジェクト";
+  } else if (textLower.includes('メモ') || textLower.includes('思考整理')) {
+    level = "💭 メモ";
+  }
+  // 「タスク」という言葉だけでは推測しない
+  
+  // 案件判定（正確な値） - キーワードが明確な場合のみ
+  if (textLower.includes('oneマーケ') || textLower.includes('マーケラボ')) {
+    project = "ONEマーケ／マーケラボ";
+  } else if (textLower.includes('redeal') || textLower.includes('リディアル') || textLower.includes('るい') || textLower.includes('rui')) {
+    project = "るい／redeal.";
+  } else if (textLower.includes('アンズボーテ')) {
+    project = "アンズボーテ";
+  } else if (textLower.includes('池袋') || textLower.includes('サンシャイン')) {
+    project = "池袋サンシャイン美容外科";
+  } else if (textLower.includes('femuse') || textLower.includes('フェミューズ')) {
+    project = "femuse";
+  }
+  
+  // 期限抽出 - 明確に日付が記載されている場合のみ
+  const dateMatches = text.match(/(\d{1,2})月(\d{1,2})日|(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})|(\d{1,2})\/(\d{1,2})|まで/);
+  if (dateMatches && (dateMatches[0].includes('月') || dateMatches[0].includes('/') || dateMatches[0].includes('-'))) {
+    if (dateMatches[1] && dateMatches[2]) {
+      const month = dateMatches[1].padStart(2, '0');
+      const day = dateMatches[2].padStart(2, '0');
+      deadline = `2023-${month}-${day}`;
+    } else if (dateMatches[3] && dateMatches[4] && dateMatches[5]) {
+      deadline = `${dateMatches[3]}-${dateMatches[4].padStart(2, '0')}-${dateMatches[5].padStart(2, '0')}`;
+    }
+  }
+
+  const fallbackResponse = {
+    properties: {
+      Name: text,
+      ステータス: "📥 未分類",
+      種別: type,
+      優先度: priority,
+      期限: deadline,
+      成果物: deliverable,
+      レベル: level,
+      案件: project
+    },
+    pageContent: this.generateWBS(text)
+  };
+
+  console.log('🔄 Using enhanced fallback response (reduced guessing):', fallbackResponse);
+  return fallbackResponse;
+}
 
   validateProjectData(data) {
     if (!data.properties) {
