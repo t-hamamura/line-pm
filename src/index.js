@@ -177,11 +177,22 @@ async function processInBackground(userId, userText) {
   } catch (error) {
     console.error('[BACKGROUND ERROR] Failed to process in background:', error);
     
+    // Gemini 2.5 Flash特有のエラー処理
+    let errorMessage = '❌ 分析中にエラーが発生しました。';
+    
+    if (error.message.includes('rate limit') || error.message.includes('quota')) {
+      errorMessage += '\n⚠️ 現在、AI分析サービスの利用上限に達しています。\n少し時間をおいてから再度お試しください。';
+    } else if (error.message.includes('timeout')) {
+      errorMessage += '\n⏰ 処理に時間がかかっています。\n再度お試しいただくか、より簡潔な内容でお試しください。';
+    } else {
+      errorMessage += '\n再度お試しください。';
+    }
+    
     // エラー時はユーザーに通知
     try {
       await lineClient.pushMessage(userId, {
         type: 'text',
-        text: `❌ 分析中にエラーが発生しました。\n再度お試しください。\n\n詳細: ${error.message}`
+        text: errorMessage
       });
     } catch (pushError) {
       console.error('[ERROR] Failed to send error notification:', pushError);
@@ -434,7 +445,8 @@ app.listen(PORT, () => {
   console.log(`         🚀 Server running on port ${PORT}`);
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('  ✨ Fast response mode enabled!');
-  console.log('  🤖 Using Gemini 2.5 Pro with async processing');
+  console.log('  🤖 Using Gemini 2.5 Flash with optimized processing');
   console.log('  ⚡ Immediate response + Background analysis');
+  console.log('  📊 Rate limits: RPM 10, TPM 250K, RPD 500');
   console.log('==================================================');
 });
