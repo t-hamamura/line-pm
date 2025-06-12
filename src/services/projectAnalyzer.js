@@ -104,7 +104,7 @@ JSON形式で出力してください：`;
       const result = await Promise.race([
         model.generateContent(systemPrompt),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Gemini API timeout')), 10000)
+          setTimeout(() => reject(new Error('Gemini API timeout')), 5000)
         )
       ]);
       
