@@ -173,10 +173,15 @@ JSON形式で出力してください：`;
       console.log('🤖 Using NEW SDK: @google/genai v1.4.0');
       console.log('🚀 Model: gemini-2.5-flash-preview-05-20 (最新高性能モデル)');
       
-     // 新SDKを使った API 呼び出し
+     // ✅ 正しい新SDK構文
     const response = await this.genai.models.generateContent({
-      model: "gemini-2.5-flash-preview-05-20",
-      contents: systemPrompt,
+      model: "gemini-2.0-flash-001",  // 最新モデル名
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: systemPrompt }]
+        }
+      ],
       config: {
         temperature: 0.2,
         topK: 20,
@@ -185,7 +190,7 @@ JSON形式で出力してください：`;
       }
     });
 
-    let jsonString = response.text.trim();
+    let jsonString = response.text();
       
       console.log('✅ Gemini 2.5 Flash response received, length:', jsonString.length);
       
