@@ -1,11 +1,17 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 
 class ProjectAnalyzer {
   constructor() {
     if (!process.env.GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY is not set in environment variables.');
     }
-    this.gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    this.genai = new GoogleGenAI({ 
+      apiKey: process.env.GEMINI_API_KEY 
+    });
+
+    // レート制限設定を正確に
+    this.tier = process.env.GEMINI_API_TIER || 'free';
+    this.setRateLimits();
     
     // レート制限管理
     this.requestCount = 0;
@@ -32,8 +38,11 @@ class ProjectAnalyzer {
       console.log('🔄 Daily limit counter reset (RPD)');
     }
     
-    // 制限チェック（安全のため少し余裕を持たせる）
-    const canRequest = this.requestCount < 8 && this.dailyCount < 450; // 10→8, 500→450
+    // 安全マージンを適用（RPMの80%, RPDの90%で制限）
+    const safeRpm = Math.floor(this.limits.rpm * 0.8);
+    const safeRpd = this.limits.rpd === Infinity ? Infinity : Math.floor(this.limits.rpd * 0.9);
+
+    const canRequest = this.requestCount < safeRpm && this.dailyCount < safeRpd;
     
     if (!canRequest) {
       console.log(`📊 Rate limit status: RPM ${this.requestCount}/8, RPD ${this.dailyCount}/450`);
@@ -45,7 +54,7 @@ class ProjectAnalyzer {
   recordRequest() {
     this.requestCount++;
     this.dailyCount++;
-    console.log(`📊 Request recorded: RPM ${this.requestCount}/8, RPD ${this.dailyCount}/450`);
+    console.log(`📊 Request recorded: RPM ${this.requestCount}/${this.limits.rpm}, RPD ${this.dailyCount}/${this.limits.rpd === Infinity ? '∞' : this.limits.rpd}`);
   }
 
   async analyzeText(text) {
@@ -137,34 +146,22 @@ const systemPrompt = `
 
 JSON形式で出力してください：`;
 
-      console.log('🤖 Using model: gemini-2.5-flash-preview-05-20 (最新高性能モデル)');
+      console.log('🤖 Using NEW SDK: @google/genai v1.4.0');
+      console.log('🚀 Model: gemini-2.5-flash-preview-05-20 (最新高性能モデル)');
       
-      // 🚀 Gemini 2.5 Flash - 最新で最も高性能なモデル
-      const model = this.gemini.getGenerativeModel({ 
-        model: "gemini-2.5-flash-preview-05-20",
-        generationConfig: {
-          temperature: 0.2,        // 2.5では低めに設定（一貫性重視）
-          topK: 20,               // 品質重視
-          topP: 0.8,              // 精度を保ちつつ多様性も確保
-          maxOutputTokens: 1024,
-        }
-      });
+     // 新SDKを使った API 呼び出し
+    const response = await this.genai.models.generateContent({
+      model: "gemini-2.5-flash-preview-05-20",
+      contents: systemPrompt,
+      config: {
+        temperature: 0.2,
+        topK: 20,
+        topP: 0.8,
+        maxOutputTokens: 1024,
+      }
+    });
 
-      console.log('📊 Gemini 2.5 Flash limits: RPM: 10, TPM: 250K, RPD: 500');
-
-      // リクエスト記録
-      this.recordRequest();
-
-      // 🚀 タイムアウトを10秒に設定（2.5は少し時間がかかる場合がある）
-      const result = await Promise.race([
-        model.generateContent(systemPrompt),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Gemini 2.5 Flash timeout')), 10000)
-        )
-      ]);
-      
-      const response = await result.response;
-      let jsonString = response.text().trim();
+    let jsonString = response.text.trim();
       
       console.log('✅ Gemini 2.5 Flash response received, length:', jsonString.length);
       
@@ -516,19 +513,24 @@ JSON形式で出力してください：`;
 
   // レート制限状況の取得
   getRateLimitStatus() {
-    return {
-      rpm: {
-        current: this.requestCount,
-        limit: 8,
-        resetTime: this.resetTime
-      },
-      rpd: {
-        current: this.dailyCount,
-        limit: 450,
-        resetTime: this.dailyResetTime
-      }
-    };
-  }
+  return {
+    sdk_version: '@google/genai v1.4.0',
+    tier: this.tier,
+    rpm: {
+      current: this.requestCount,
+      limit: this.limits.rpm,
+      resetTime: this.resetTime
+    },
+    rpd: {
+      current: this.dailyCount,
+      limit: this.limits.rpd === Infinity ? 'unlimited' : this.limits.rpd,
+      resetTime: this.dailyResetTime
+    },
+    tpm: {
+      limit: this.limits.tpm
+    }
+  };
+}
 }
 
 module.exports = new ProjectAnalyzer();
