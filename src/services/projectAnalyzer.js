@@ -89,11 +89,14 @@ JSON形式で出力してください：`;
       
       // Gemini 2.5 Proモデルを使用
       const model = this.gemini.getGenerativeModel({ 
-        model: "gemini-2.5-pro",
+        model: "gemini-2.5-flash-preview-05-20",  // ← ここを変更
         generationConfig: {
-          temperature: 0.1,  // より一貫性重視
-          topK: 10,         // より保守的
-          maxOutputTokens: 1024
+          temperature: 0.1,
+          topK: 10,
+          maxOutputTokens: 1024,
+          thinking_config: {
+            thinking_budget: 0  // 低コストモード
+          }
         }
       });
 
