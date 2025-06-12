@@ -1,15 +1,37 @@
 {
   "name": "line-pm",
-  "version": "1.0.0",
+  "version": "2.5.0",
+  "description": "LINE Bot × Gemini 2.5 Flash × Notion による次世代プロジェクト管理システム - バックグラウンド処理・WBS自動生成・AI分析",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "dev": "NODE_ENV=development node src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "line-bot",
+    "gemini-ai",
+    "gemini-2.5-flash",
+    "notion",
+    "project-management",
+    "wbs-generation",
+    "ai-analysis",
+    "background-processing"
+  ],
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@line/bot-sdk": "^10.0.0",
     "@notionhq/client": "^3.1.3",
     "dotenv": "^16.5.0",
     "express": "^4.21.2"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-hamamura/line-pm.git"
+  },
+  "author": "t-hamamura",
+  "license": "MIT"
 }

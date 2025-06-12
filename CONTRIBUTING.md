@@ -17,20 +17,22 @@ line-pmプロジェクトへの貢献を検討していただき、ありがと�
 - **🔍 コードレビュー**: 他の貢献者のコードレビュー
 
 ### 🚀 特に歓迎する貢献
-- **Gemini AI関連**: 新しいモデル対応、プロンプト改善
+- **Gemini 2.5 Flash関連**: 新しいモデル対応、プロンプト改善、パフォーマンス最適化
+- **バックグラウンド処理**: 非同期処理の改善、パフォーマンス向上
 - **WBS生成**: 業界別テンプレート、生成ロジック改善
-- **Notion統合**: 新しいプロパティタイプ対応
-- **パフォーマンス**: レスポンス時間改善、メモリ最適化
-- **セキュリティ**: 脆弱性修正、セキュリティ強化
-- **国際化**: 多言語対応
+- **Notion統合**: 新しいプロパティタイプ対応、Markdown処理改善
+- **LINE Bot機能**: プッシュ通知改善、メッセージフォーマット最適化
+- **パフォーマンス**: レスポンス時間改善、メモリ最適化、キャッシュ改善
+- **セキュリティ**: 脆弱性修正、セキュリティ強化、重複防止機能
+- **国際化**: 多言語対応、グローバル展開
 
 ## 🛠️ 開発環境のセットアップ
 
 ### 前提条件
-- **Node.js**: 18.0.0以上
-- **npm**: 8.0.0以上
+- **Node.js**: 18.0.0以上（推奨: 20.x LTS）
+- **npm**: 9.0.0以上
 - **Git**: 最新版
-- **エディタ**: VS Code推奨（Cursor, WebStorm等も可）
+- **エディタ**: VS Code推奨（拡張機能: ESLint, Prettier）
 
 ### 1. リポジトリのフォーク・クローン
 
@@ -53,7 +55,7 @@ git remote add upstream https://github.com/t-hamamura/line-pm.git
 npm install
 
 # インストール確認
-npm list
+npm list --depth=0
 ```
 
 ### 3. 環境変数の設定
@@ -65,7 +67,7 @@ cp .env.example .env
 # 必要な環境変数を設定
 # LINE_CHANNEL_ACCESS_TOKEN=your_token
 # LINE_CHANNEL_SECRET=your_secret  
-# GEMINI_API_KEY=your_gemini_key
+# GEMINI_API_KEY=your_gemini_key (Gemini 2.5 Flash対応)
 # NOTION_API_KEY=your_notion_key
 # NOTION_DATABASE_ID=your_database_id
 ```
@@ -78,6 +80,16 @@ npm start
 
 # ヘルスチェック確認
 curl http://localhost:8080/
+
+# 期待される応答
+# {
+#   "status": "OK",
+#   "timestamp": "2025-06-12T10:30:00.000Z",
+#   "services": {
+#     "projectAnalyzer": true,
+#     "notionService": true
+#   }
+# }
 ```
 
 ### 5. ngrokセットアップ（LINE Botテスト用）
@@ -116,6 +128,8 @@ git checkout -b fix/issue-number-description
 - **ドキュメント**: `docs/update-readme`
 - **リファクタリング**: `refactor/improve-performance`
 - **テスト**: `test/add-unit-tests`
+- **Gemini改善**: `gemini/improve-analysis`
+- **パフォーマンス**: `perf/optimize-background-processing`
 
 ### コミット規則
 
@@ -134,15 +148,25 @@ git checkout -b fix/issue-number-description
 - **docs**: ドキュメント変更
 - **style**: フォーマット変更（機能に影響なし）
 - **refactor**: リファクタリング
+- **perf**: パフォーマンス改善
 - **test**: テスト追加・修正
 - **chore**: ビルド・設定変更
 
+#### スコープ例
+- **gemini**: Gemini AI関連
+- **notion**: Notion統合関連
+- **line**: LINE Bot関連
+- **wbs**: WBS生成関連
+- **cache**: キャッシュ関連
+- **async**: 非同期処理関連
+
 #### 例
 ```bash
-feat(gemini): add Gemini 2.5 Flash support
+feat(gemini): upgrade to Gemini 2.5 Flash
 
-- Update model configuration
-- Add new generation parameters
+- Update model configuration for latest version
+- Add new generation parameters for better accuracy
+- Implement background processing for better UX
 - Maintain backward compatibility
 
 Closes #123
@@ -153,7 +177,7 @@ Closes #123
 #### ESLintとPrettier（推奨）
 ```bash
 # ESLint設定
-npm install --save-dev eslint prettier
+npm install --save-dev eslint prettier eslint-config-prettier
 
 # .eslintrc.js作成
 module.exports = {
@@ -161,10 +185,12 @@ module.exports = {
     node: true,
     es2021: true
   },
-  extends: ['eslint:recommended'],
+  extends: ['eslint:recommended', 'prettier'],
   rules: {
-    'no-console': 'off',
-    'no-unused-vars': 'warn'
+    'no-console': 'off', // ログ出力のため許可
+    'no-unused-vars': 'warn',
+    'prefer-const': 'error',
+    'no-var': 'error'
   }
 };
 ```
@@ -175,16 +201,25 @@ module.exports = {
 - **セミコロン**: 必須
 - **変数名**: camelCase
 - **定数**: UPPER_SNAKE_CASE
-- **ファイル名**: kebab-case
+- **ファイル名**: camelCase (services), kebab-case (others)
+- **関数**: async/await優先、Promiseチェーンは避ける
 
 #### 例
 ```javascript
 // ✅ Good
-const projectAnalyzer = require('./services/project-analyzer');
+const projectAnalyzer = require('./services/projectAnalyzer');
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const CACHE_DURATION = 5 * 60 * 1000; // 5分
 
-function analyzeText(text) {
-  return projectAnalyzer.analyze(text);
+async function analyzeText(text) {
+  try {
+    const result = await projectAnalyzer.analyze(text);
+    console.log('[SUCCESS] Analysis completed');
+    return result;
+  } catch (error) {
+    console.error('[ERROR] Analysis failed:', error);
+    throw error;
+  }
 }
 
 // ❌ Bad
@@ -193,385 +228,294 @@ const gemini_api_key = process.env.GEMINI_API_KEY;
 
 function analyze_text(text) {
   return ProjectAnalyzer.analyze(text)
+    .then(result => {
+      console.log('Analysis completed')
+      return result
+    })
+    .catch(error => {
+      console.log('Analysis failed')
+      throw error
+    })
 }
 ```
 
 ## 🧪 テスト
 
 ### テスト構造
-
 ```
-test/
+tests/
 ├── unit/
 │   ├── services/
-│   │   ├── project-analyzer.test.js
-│   │   ├── notion.test.js
-│   │   └── line.test.js
+│   │   ├── projectAnalyzer.test.js
+│   │   └── notion.test.js
 │   └── utils/
-│       └── helpers.test.js
 ├── integration/
 │   ├── webhook.test.js
-│   └── api.test.js
+│   └── gemini-integration.test.js
 └── fixtures/
     ├── sample-messages.json
-    └── expected-results.json
+    └── notion-responses.json
 ```
 
 ### テスト実行
-
 ```bash
 # 全テスト実行
 npm test
 
-# 特定テスト実行
-npm test -- test/unit/services/project-analyzer.test.js
+# 特定ファイルのテスト
+npm test -- tests/unit/services/projectAnalyzer.test.js
 
-# カバレッジ確認
+# カバレッジ付きテスト
 npm run test:coverage
 ```
 
-### テスト例
-
+### テスト作成例
 ```javascript
-// test/unit/services/project-analyzer.test.js
+// tests/unit/services/projectAnalyzer.test.js
 const projectAnalyzer = require('../../../src/services/projectAnalyzer');
 
 describe('ProjectAnalyzer', () => {
   describe('analyzeText', () => {
-    test('should analyze simple project text', async () => {
-      const input = '新しいプロジェクトを考える';
-      const result = await projectAnalyzer.analyzeText(input);
+    it('should analyze simple project text', async () => {
+      const text = 'マーケティング戦略を来月までに作成';
+      const result = await projectAnalyzer.analyzeText(text);
       
-      expect(result.properties).toBeDefined();
-      expect(result.properties.Name).toBe(input);
-      expect(result.properties.ステータス).toBe('📥 未分類');
-      expect(result.pageContent).toBeDefined();
+      expect(result).toHaveProperty('properties');
+      expect(result.properties.ステータス).toBe('未分類');
+      expect(result).toHaveProperty('pageContent');
     });
-    
-    test('should extract deadline correctly', async () => {
-      const input = 'マーケティング戦略を12月20日まで作成';
-      const result = await projectAnalyzer.analyzeText(input);
-      
-      expect(result.properties.期限).toBe('2023-12-20');
-    });
-    
-    test('should handle invalid input gracefully', async () => {
-      const result = await projectAnalyzer.analyzeText('');
-      
-      expect(result.properties.ステータス).toBe('📥 未分類');
-      expect(result.pageContent).toBeDefined();
-    });
-  });
-  
-  describe('createEnhancedFallbackResponse', () => {
-    test('should create valid fallback response', () => {
-      const input = 'テストプロジェクト';
-      const result = projectAnalyzer.createEnhancedFallbackResponse(input);
-      
-      expect(result.properties.Name).toBe(input);
-      expect(result.pageContent).toContain('WBS');
+
+    it('should handle empty text gracefully', async () => {
+      const text = '';
+      await expect(projectAnalyzer.analyzeText(text))
+        .rejects.toThrow('Input text is required');
     });
   });
 });
 ```
 
-### モックとスタブ
+## 🔧 デバッグ
+
+### ログレベル
+プロジェクトでは以下のログ形式を使用：
 
 ```javascript
-// Gemini APIのモック
-jest.mock('@google/generative-ai', () => ({
-  GoogleGenerativeAI: jest.fn().mockImplementation(() => ({
-    getGenerativeModel: jest.fn().mockReturnValue({
-      generateContent: jest.fn().mockResolvedValue({
-        response: {
-          text: () => JSON.stringify({
-            properties: {
-              Name: 'テスト',
-              ステータス: '📥 未分類'
-            },
-            pageContent: 'テスト用WBS'
-          })
-        }
-      })
-    })
-  }))
-}));
+// 成功ログ
+console.log('✅ Process completed successfully');
+
+// 情報ログ  
+console.log('[INFO] Processing user message');
+
+// 警告ログ
+console.warn('⚠️ Rate limit approaching');
+
+// エラーログ
+console.error('❌ Failed to process:', error.message);
+
+// デバッグログ（開発時のみ）
+if (process.env.NODE_ENV === 'development') {
+  console.log('[DEBUG] Variable state:', variable);
+}
 ```
 
-## 📝 ドキュメント
-
-### ドキュメント構造
-
-```
-docs/
-├── api.md                    # API仕様書
-├── architecture.md           # システム設計書
-├── wbs-generation.md         # WBS生成機能
-├── gemini-upgrade-guide.md   # Gemini升级指南
-├── troubleshooting.md        # トラブルシューティング
-├── classification-system.md  # 分類体系
-└── deployment.md            # デプロイメント手順
-```
-
-### ドキュメント作成・更新指針
-
-#### 対象読者を明確に
-- **エンドユーザー**: README.md
-- **開発者**: docs/*.md
-- **運用担当**: deployment.md, troubleshooting.md
-
-#### 文書構造
-```markdown
-# タイトル
-
-## 📋 概要
-- 目的と対象読者
-- 前提知識
-
-## 📊 詳細内容
-- 具体的な説明
-- 図表・コード例
-
-## 📞 関連情報
-- 関連ドキュメントへのリンク
+### VS Code デバッグ設定
+```json
+// .vscode/launch.json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/index.js",
+      "env": {
+        "NODE_ENV": "development"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "console": "integratedTerminal"
+    }
+  ]
+}
 ```
 
-#### コード例の品質
-- **動作する例**: 実際に動作確認済み
-- **コメント**: 重要な部分に説明追加
-- **エラーハンドリング**: 適切な例外処理
+## 🚀 パフォーマンス最適化
 
-## 🐛 Issue報告
+### 重要な考慮事項
+1. **Gemini API制限**: RPM: 10, TPM: 250K, RPD: 500
+2. **LINE応答制限**: 30秒以内
+3. **メモリ使用量**: 512MB未満推奨
+4. **レスポンス時間**: 初回応答100ms未満
 
-### バグ報告
+### プロファイリング
+```javascript
+// パフォーマンス測定例
+const startTime = Date.now();
 
-#### 必要な情報
-1. **現象**: 何が起きているか
-2. **期待値**: 何が起きるべきか
-3. **再現手順**: 問題を再現する方法
-4. **環境**: OS、Node.jsバージョン等
-5. **ログ**: エラーメッセージやスタックトレース
+// 処理実行
+await processFunction();
 
-#### バグ報告テンプレート
-```markdown
-## 🐛 バグ報告
-
-### 現象
-WBS生成で空の内容が生成される
-
-### 期待値
-具体的なWBS構造が生成される
-
-### 再現手順
-1. LINE Botに「新しいプロジェクト」と送信
-2. 返信メッセージを確認
-3. NotionページでWBS内容を確認
-
-### 環境
-- OS: macOS 13.0
-- Node.js: 18.17.0
-- npm: 9.6.7
-
-### ログ
-```
-[GEMINI] Empty pageContent generated
-[NOTION] Creating fallback WBS
+const endTime = Date.now();
+console.log(`[PERF] Processing took ${endTime - startTime}ms`);
 ```
 
-### 追加情報
-月曜日の朝によく発生する傾向がある
-```
+## 🛡️ セキュリティ
 
-### 機能要望
+### セキュリティチェックリスト
+- [ ] 環境変数の適切な管理
+- [ ] LINE Webhook署名検証
+- [ ] 入力値のサニタイゼーション
+- [ ] エラー情報の適切な隠蔽
+- [ ] レート制限の実装
+- [ ] ログ情報の機密性確保
 
-#### 提案テンプレート
-```markdown
-## ✨ 機能要望
-
-### 概要
-Slack Bot対応の追加
-
-### 背景・動機
-チームがSlackを主に使用しており、LINEからの移行を希望
-
-### 提案する解決方法
-Slack Bot SDKを使用した実装
-
-### 代替案
-Slack Webhookによる簡易実装
-
-### 優先度
-Medium（3ヶ月以内）
-
-### 実装に必要なリソース
-- Slack Bot SDK導入
-- 認証フロー実装
-- メッセージフォーマット調整
-```
-
-## 🔄 Pull Request
-
-### PR作成前チェックリスト
-
-- [ ] **ブランチ**: feature/fix ブランチから作成
-- [ ] **テスト**: 新規・既存テストが通過
-- [ ] **ドキュメント**: 必要に応じて更新
-- [ ] **コード品質**: ESLint/Prettierチェック通過
-- [ ] **コミット**: 適切なコミットメッセージ
-- [ ] **競合**: mainブランチとの競合解決済み
-
-### PR作成手順
-
+### セキュリティテスト
 ```bash
-# 1. 最新のmainを取得
-git fetch upstream
-git checkout main
-git merge upstream/main
+# 脆弱性スキャン
+npm audit
 
-# 2. 機能ブランチを最新化
-git checkout feature/your-feature
-git rebase main
-
-# 3. テスト実行
-npm test
-
-# 4. プッシュ
-git push origin feature/your-feature
-
-# 5. GitHub でPull Request作成
+# 修正適用
+npm audit fix
 ```
 
-### PRテンプレート
+## 📝 ドキュメント更新
 
+### ドキュメント種類
+- **README.md**: プロジェクト概要
+- **CONTRIBUTING.md**: 貢献ガイド（このファイル）
+- **CHANGELOG.md**: 変更履歴
+- **docs/**: 詳細ドキュメント
+  - `classification-system.md`: 分類システム
+  - `wbs_generation_doc.md`: WBS生成
+  - `api_documentation.md`: API仕様
+  - `architecture_doc.md`: システム設計
+  - `troubleshooting_doc.md`: トラブルシューティング
+  - `deployment_guide.md`: デプロイガイド
+  - `gemini_upgrade_guide.md`: Geminiアップグレード
+
+### ドキュメント更新ルール
+- 機能追加時は必ずREADME更新
+- API変更時はapi_documentation.md更新
+- バージョン変更時はCHANGELOG.md更新
+- コード例は動作確認済みのもののみ
+
+## 🔍 Issue・Pull Request
+
+### Issue作成
 ```markdown
-## 📋 概要
-このPRは何を変更しますか？
+## 問題の概要
+簡潔に問題を説明
 
-## 🔧 変更内容
-- [ ] 新機能追加
-- [ ] バグ修正
-- [ ] ドキュメント更新
-- [ ] リファクタリング
-- [ ] テスト追加
+## 再現手順
+1. 手順1
+2. 手順2
+3. 結果
 
-## 📊 詳細
-### 変更したファイル
-- `src/services/projectAnalyzer.js`: Gemini 2.5対応
-- `docs/gemini-upgrade-guide.md`: ドキュメント更新
+## 期待する動作
+何が起こるべきか
 
-### テスト
-- [ ] 新規テスト追加
-- [ ] 既存テスト修正
-- [ ] 手動テスト実施
+## 実際の動作  
+何が起こったか
 
-## 🔗 関連Issue
+## 環境
+- OS: macOS 14.0
+- Node.js: 20.10.0
+- npm: 10.2.0
+
+## 追加情報
+ログ、スクリーンショットなど
+```
+
+### Pull Request作成
+```markdown
+## 変更内容
+- 機能追加/バグ修正の詳細
+- 技術的な変更点
+
+## 関連Issue
 Closes #123
 
-## 📸 スクリーンショット
-（UI変更の場合）
+## テスト
+- [ ] 既存テストが通過
+- [ ] 新しいテストを追加
+- [ ] 手動テストを実施
 
-## ✅ チェックリスト
-- [ ] 動作テスト完了
-- [ ] ドキュメント更新
-- [ ] 下位互換性確認
-- [ ] エラーハンドリング実装
+## チェックリスト
+- [ ] コードレビュー済み
+- [ ] ドキュメント更新済み
+- [ ] CHANGELOG.md更新済み
+- [ ] セキュリティ確認済み
 ```
 
-### コードレビュー
+### コードレビュー観点
+1. **機能性**: 仕様通りに動作するか
+2. **性能**: パフォーマンスに問題ないか
+3. **保守性**: 理解しやすく修正しやすいか
+4. **セキュリティ**: 脆弱性はないか
+5. **一貫性**: 既存コードとの整合性
+6. **テスト**: 適切なテストがあるか
 
-#### レビューポイント
-- **機能性**: 要件を満たしているか
-- **品質**: バグや問題がないか
-- **性能**: パフォーマンスへの影響
-- **セキュリティ**: セキュリティリスクの有無
-- **保守性**: 理解しやすく変更しやすいか
-- **テスト**: 適切なテストが含まれているか
+## 🤝 コミュニティ
 
-#### レビューの心構え
-- **建設的**: 改善提案を含む
-- **具体的**: 曖昧な指摘は避ける
-- **敬意**: 相手への敬意を持つ
-- **学習**: 互いの学習機会として活用
+### 質問・相談
+- **GitHub Issues**: バグ報告、機能要望
+- **GitHub Discussions**: 技術相談、アイデア
+- **Pull Request**: コードレビュー依頼
 
-## 🎯 コミュニティ
+### レスポンス目標
+- **Issue確認**: 48時間以内
+- **PR初回レビュー**: 72時間以内
+- **質問回答**: 24時間以内（平日）
 
-### コミュニケーション
+## 🏆 貢献者の認定
 
-#### GitHub Discussions
-- **質問**: 使い方がわからない時
-- **アイデア**: 新機能のブレインストーミング
-- **ショーケース**: 作成した拡張機能の紹介
+### 貢献レベル
+1. **First-time Contributor**: 初回貢献
+2. **Regular Contributor**: 5回以上貢献
+3. **Core Contributor**: 継続的な貢献・メンテナンス
+4. **Maintainer**: プロジェクト管理権限
 
-#### Issues
-- **バグ報告**: 具体的な問題の報告
-- **機能要望**: 明確な改善提案
+### 特別貢献
+- **Security**: セキュリティ改善
+- **Performance**: パフォーマンス向上
+- **Documentation**: ドキュメント充実
+- **Testing**: テスト改善
+- **Gemini**: AI機能改善
 
-### 行動規範
+## 📋 開発ロードマップ
 
-#### 基本原則
-- **包含性**: 全ての人を歓迎
-- **尊重**: 異なる意見や経験を尊重
-- **協力**: 建設的な協力関係
-- **学習**: 互いの成長を支援
+### 短期目標（v2.6.0）
+- [ ] 多言語対応（英語）
+- [ ] プロジェクト進捗追跡
+- [ ] カスタムテンプレート
+- [ ] パフォーマンス監視
 
-#### 禁止事項
-- 個人攻撃や嫌がらせ
-- 差別的な言動
-- スパムや無関係な投稿
-- 機密情報の漏洩
+### 中期目標（v2.7.0）
+- [ ] 音声入力対応
+- [ ] 画像解析機能
+- [ ] カレンダー統合
+- [ ] レポート機能
 
-## 📚 参考リソース
+### 長期目標（v3.0.0）
+- [ ] 機械学習による個人化
+- [ ] 他プラットフォーム対応
+- [ ] 予測分析機能
+- [ ] モバイルアプリ
 
-### 学習リソース
+## 📞 サポート
 
-#### プロジェクト関連
-- [Node.js Documentation](https://nodejs.org/docs/)
-- [Express.js Guide](https://expressjs.com/guide/)
-- [LINE Bot SDK](https://line.github.io/line-bot-sdk-nodejs/)
-- [Notion API](https://developers.notion.com/)
-- [Google Gemini AI](https://ai.google.dev/docs)
+### 技術サポート
+- **開発環境**: セットアップ支援
+- **API統合**: Gemini/Notion/LINE
+- **デプロイ**: Railway/その他プラットフォーム
+- **トラブルシューティング**: 問題解決支援
 
-#### 開発ツール
-- [Git 基本操作](https://git-scm.com/docs)
-- [GitHub Flow](https://guides.github.com/introduction/flow/)
-- [Jest Testing Framework](https://jestjs.io/docs/getting-started)
-
-### 内部ドキュメント
-- [API仕様書](./docs/api.md)
-- [アーキテクチャ](./docs/architecture.md)
-- [トラブルシューティング](./docs/troubleshooting.md)
-
-## 🏆 貢献者
-
-### 現在の貢献者
-- **@t-hamamura**: プロジェクトリード
-- **Claude AI**: 設計・ドキュメント支援
-
-### 貢献の認識
-- **Contributors**: README.mdで名前を掲載
-- **Changelog**: 各リリースで貢献を記録
-- **GitHub**: Contributor graphで可視化
-
-### 特別な貢献
-- **First-time Contributors**: 初回貢献者は特別に歓迎
-- **Long-term Contributors**: 継続的な貢献者には感謝
-
-## ❓ よくある質問
-
-### Q: どこから始めれば良いですか？
-A: [Good First Issues](https://github.com/t-hamamura/line-pm/labels/good%20first%20issue) ラベルの付いたIssueから始めることをお勧めします。
-
-### Q: 開発環境でうまく動作しません
-A: [トラブルシューティングガイド](./docs/troubleshooting.md) を確認し、それでも解決しない場合はIssueを作成してください。
-
-### Q: 機能要望はどのように提案すれば良いですか？
-A: GitHub Issuesで機能要望テンプレートを使用して提案してください。実装前にディスカッションすることをお勧めします。
-
-### Q: AIモデルやAPIの知識がなくても貢献できますか？
-A: はい。ドキュメント改善、UI/UX改善、テスト追加など、様々な形で貢献が可能です。
+### 連絡先
+- **Issue作成**: 技術的な問題・要望
+- **Discussion**: 設計・アーキテクチャ相談
+- **Email**: 機密事項（セキュリティ等）
 
 ---
 
-**🎉 皆様の貢献をお待ちしています！**
-
-質問や不明点があれば、遠慮なくIssueやDiscussionで相談してください。一緒に素晴らしいプロジェクト管理システムを作り上げましょう！
+**🙏 皆様の貢献によって、line-pmはより良いプロジェクト管理ツールに成長します。**  
+**💪 一緒に次世代のプロジェクト管理システムを作りましょう！**

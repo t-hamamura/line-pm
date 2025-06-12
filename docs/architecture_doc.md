@@ -4,7 +4,7 @@
 
 ## 📋 概要
 
-line-pmは、LINE Bot、Gemini AI、Notion APIを統合した次世代プロジェクト管理システムです。自然言語でのプロジェクト登録から構造化されたタスク管理まで、エンドツーエンドの自動化を実現しています。
+line-pmは、LINE Bot、Gemini 2.5 Flash AI、Notion APIを統合した次世代プロジェクト管理システムです。自然言語でのプロジェクト登録から構造化されたタスク管理まで、エンドツーエンドの自動化を実現しています。最新のバックグラウンド処理アーキテクチャにより、ユーザー体験を大幅に向上させています。
 
 ## 🏗️ システム全体アーキテクチャ
 
@@ -12,7 +12,7 @@ line-pmは、LINE Bot、Gemini AI、Notion APIを統合した次世代プロジ�
 graph TB
     subgraph "外部サービス"
         LINE[LINE Platform]
-        GEMINI[Google Gemini AI]
+        GEMINI[Google Gemini 2.5 Flash]
         NOTION[Notion API]
     end
     
@@ -20,24 +20,28 @@ graph TB
         subgraph "API Layer"
             WEBHOOK[Webhook Handler]
             HEALTH[Health Check]
+            IMMEDIATE[Immediate Response]
         end
         
         subgraph "Business Logic"
             ANALYZER[Project Analyzer]
             DUPLICATOR[Duplicate Manager]
             FORMATTER[Message Formatter]
+            BACKGROUND[Background Processor]
         end
         
         subgraph "Integration Layer"
             LINEAPI[LINE API Client]
-            GEMINIAPI[Gemini API Client]
+            GEMINIAPI[Gemini 2.5 Flash Client]
             NOTIONAPI[Notion API Client]
+            PUSH[Push Notification]
         end
         
         subgraph "Infrastructure"
             CACHE[Memory Cache]
             LOGS[Logging System]
             CONFIG[Configuration]
+            TIMEOUT[Timeout Control]
         end
     end
     
@@ -47,15 +51,19 @@ graph TB
     end
     
     LINE --> WEBHOOK
-    WEBHOOK --> DUPLICATOR
+    WEBHOOK --> IMMEDIATE
+    IMMEDIATE --> LINEAPI
+    LINEAPI --> LINE
+    WEBHOOK --> BACKGROUND
+    BACKGROUND --> DUPLICATOR
     DUPLICATOR --> ANALYZER
     ANALYZER --> GEMINIAPI
     GEMINIAPI --> GEMINI
     ANALYZER --> NOTIONAPI
     NOTIONAPI --> NOTION
     ANALYZER --> FORMATTER
-    FORMATTER --> LINEAPI
-    LINEAPI --> LINE
+    FORMATTER --> PUSH
+    PUSH --> LINE
     
     GITHUB --> RAILWAY
     RAILWAY --> WEBHOOK
@@ -69,9 +77,9 @@ graph TB
 |---|-----|-----------|------|
 | **Runtime** | Node.js | >=18.0.0 | JavaScript実行環境 |
 | **Framework** | Express.js | ^4.21.2 | Webサーバーフレームワーク |
-| **AI Engine** | Gemini 2.0 Flash-Lite | latest | 自然言語処理とWBS生成 |
+| **AI Engine** | Gemini 2.5 Flash | latest | 最高性能の自然言語処理とWBS生成 |
 | **Database** | Notion API | ^3.1.3 | プロジェクトデータ永続化 |
-| **Messaging** | LINE Bot SDK | ^10.0.0 | チャットインターフェース |
+| **Messaging** | LINE Bot SDK | ^10.0.0 | チャットインターフェース + プッシュ通知 |
 
 ### 依存関係
 
@@ -93,70 +101,86 @@ graph TB
 - **CI/CD**: GitHub Actions (自動)
 - **監視**: Railway ログ + カスタムメトリクス
 - **設定管理**: 環境変数 + dotenv
+- **タイムアウト制御**: 10秒タイムアウト + フォールバック
 
 ## 📊 データフロー詳細
 
-### 1. メッセージ受信フロー
+### 1. バックグラウンド処理フロー（v2.5.0）
 
 ```mermaid
 sequenceDiagram
     participant User
     participant LINE
     participant Webhook
+    participant ImmediateResponse
+    participant BackgroundProcessor
     participant DuplicateManager
     participant ProjectAnalyzer
     participant Gemini
     participant NotionService
     participant Notion
-    participant MessageFormatter
+    participant PushNotification
     
     User->>LINE: テキストメッセージ送信
     LINE->>Webhook: POST /webhook
     Webhook->>Webhook: 署名検証
-    Webhook->>DuplicateManager: 重複チェック
     
-    alt 新規メッセージ
-        DuplicateManager->>ProjectAnalyzer: 分析リクエスト
-        ProjectAnalyzer->>Gemini: テキスト分析
-        Gemini-->>ProjectAnalyzer: 分析結果 + WBS
-        ProjectAnalyzer->>NotionService: ページ作成リクエスト
-        NotionService->>Notion: ページ作成
-        Notion-->>NotionService: 作成完了
-        NotionService-->>ProjectAnalyzer: Notion情報
-        ProjectAnalyzer->>MessageFormatter: 詳細応答生成
-        MessageFormatter->>LINE: 詳細メッセージ送信
-        LINE->>User: WBS付き完了通知
-    else 重複メッセージ
-        DuplicateManager->>LINE: 重複通知
-        LINE->>User: スキップメッセージ
+    par 即座応答
+        Webhook->>ImmediateResponse: 即座処理
+        ImmediateResponse->>LINE: "🤖 分析中です..."
+        LINE->>User: 即座フィードバック
+    and バックグラウンド処理
+        Webhook->>BackgroundProcessor: 非同期処理開始
+        BackgroundProcessor->>DuplicateManager: 重複チェック
+        
+        alt 新規メッセージ
+            DuplicateManager->>ProjectAnalyzer: 分析リクエスト
+            ProjectAnalyzer->>Gemini: テキスト分析（10秒タイムアウト）
+            Gemini-->>ProjectAnalyzer: 分析結果 + WBS
+            ProjectAnalyzer->>NotionService: ページ作成リクエスト
+            NotionService->>Notion: ページ作成
+            Notion-->>NotionService: 作成完了
+            NotionService-->>ProjectAnalyzer: Notion情報
+            ProjectAnalyzer->>PushNotification: 詳細結果
+            PushNotification->>LINE: プッシュメッセージ送信
+            LINE->>User: WBS付き完了通知
+        else 重複メッセージ
+            DuplicateManager->>PushNotification: 重複通知
+            PushNotification->>LINE: スキップメッセージ
+            LINE->>User: 重複スキップ通知
+        end
     end
 ```
 
-### 2. AI分析パイプライン
+### 2. AI分析パイプライン（Gemini 2.5 Flash）
 
 ```mermaid
 flowchart TD
-    A[テキスト入力] --> B[プロンプト生成]
-    B --> C[Gemini 2.0 Flash-Lite]
-    C --> D{レスポンス取得}
-    D -->|成功| E[JSON クリーニング]
-    D -->|失敗/タイムアウト| F[フォールバック処理]
+    A[テキスト入力] --> B[レート制限チェック]
+    B --> C{制限内?}
+    C -->|はい| D[プロンプト生成]
+    C -->|いいえ| E[フォールバック処理]
     
-    E --> G[JSON パース]
-    G --> H{パース成功?}
-    H -->|成功| I[データ検証]
-    H -->|失敗| F
+    D --> F[Gemini 2.5 Flash]
+    F --> G{レスポンス取得}
+    G -->|成功| H[JSON クリーニング]
+    G -->|失敗/10秒タイムアウト| E
     
-    I --> J{pageContent有無?}
-    J -->|なし| K[WBS自動生成]
-    J -->|あり| L[プロパティ設定]
-    K --> L
+    H --> I[JSON パース]
+    I --> J{パース成功?}
+    J -->|成功| K[データ検証]
+    J -->|失敗| E
     
-    F --> M[パターンマッチング]
-    M --> N[基本WBS生成] 
-    N --> L
+    K --> L{pageContent有無?}
+    L -->|なし| M[WBS自動生成]
+    L -->|あり| N[プロパティ設定]
+    M --> N
     
-    L --> O[分析結果出力]
+    E --> O[パターンマッチング]
+    O --> P[基本WBS生成] 
+    P --> N
+    
+    N --> Q[分析結果出力]
 ```
 
 ### 3. Notion統合フロー
@@ -171,8 +195,9 @@ flowchart TD
     F --> G{作成成功?}
     G -->|成功| H[実際の値取得]
     G -->|失敗| I[フォールバック作成]
-    H --> J[完了]
+    H --> J[プッシュ通知準備]
     I --> J
+    J --> K[完了]
 ```
 
 ## 🏛️ レイヤード アーキテクチャ
@@ -181,17 +206,28 @@ flowchart TD
 
 #### Webhook Handler (`src/index.js`)
 ```javascript
-// リクエスト受信と初期処理
+// v2.5.0: バックグラウンド処理対応
 app.post('/webhook', middleware(lineConfig), async (req, res) => {
-  // 署名検証 (LINE SDK middleware)
-  // イベント分散処理
-  // レスポンス統一
+  try {
+    // 🚀 即座に「処理中」メッセージを返信
+    await lineClient.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '🤖 分析中です...\n少々お待ちください（約5-10秒）'
+    });
+
+    // 🚀 バックグラウンドで非同期処理を開始
+    processInBackground(userId, userText);
+  } catch (error) {
+    console.error('[ERROR] Request processing failed:', error);
+  }
 });
 ```
 
 **責務**:
 - HTTPリクエスト/レスポンス処理
 - LINE署名検証
+- 即座応答制御
+- バックグラウンド処理起動
 - エラーハンドリング
 - ログ出力
 
