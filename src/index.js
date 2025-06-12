@@ -65,7 +65,7 @@ try {
     notionService = null;
 }
 
-// --- 2. メインの処理フローを定義 ---
+// --- 2. 高速化されたメイン処理フロー ---
 
 async function handleEvent(event) {
   // テキストメッセージ以外、または空のメッセージは無視
@@ -74,31 +74,23 @@ async function handleEvent(event) {
     return Promise.resolve(null);
   }
 
-  const userText = event.message.text.trim(); // trimを追加
+  const userText = event.message.text.trim();
   const userId = event.source.userId;
   const eventId = event.webhookEventId || `${userId}-${event.timestamp}`;
-  const messageHash = `${userId}-${userText}-${Math.floor(Date.now() / 300000)}`; // 5分単位に変更
-  const emergencyKey = `${userId}-${userText}`; // 緊急重複防止用
+  const messageHash = `${userId}-${userText}-${Math.floor(Date.now() / 300000)}`;
+  const emergencyKey = `${userId}-${userText}`;
 
-  // 緊急重複防止（この部分を追加）
+  // 緊急重複防止
   if (processedEvents.has(emergencyKey)) {
     console.log('[EMERGENCY] Duplicate message detected, skipping');
     return Promise.resolve(null);
   }
   
   console.log(`[EVENT] Received text message: "${userText}"`);
-  console.log(`[EVENT] Event ID: ${eventId}`);
-  console.log(`[EVENT] Message hash: ${messageHash}`);
 
   // 重複チェック
-  if (processedEvents.has(eventId)) {
-    console.log(`[DUPLICATE] Event ${eventId} already processed, skipping`);
-    return Promise.resolve(null);
-  }
-
-  if (processedEvents.has(messageHash)) {
-    console.log(`[DUPLICATE] Similar message processed recently, skipping`);
-    // 重複の場合は簡単な通知のみ
+  if (processedEvents.has(eventId) || processedEvents.has(messageHash)) {
+    console.log(`[DUPLICATE] Message already processed, skipping`);
     try {
       await lineClient.replyMessage(event.replyToken, {
         type: 'text',
@@ -110,21 +102,20 @@ async function handleEvent(event) {
     return Promise.resolve(null);
   }
 
-  // 処理開始前に重複防止マークを設定（重要！）
+  // 処理開始前に重複防止マークを設定
   const processingTimestamp = Date.now();
   processedEvents.set(eventId, processingTimestamp);
   processedEvents.set(messageHash, processingTimestamp);
-  processedEvents.set(emergencyKey, processingTimestamp); // 緊急キーも追加
+  processedEvents.set(emergencyKey, processingTimestamp);
 
   // サービスが利用できない場合の処理
   if (!projectAnalyzer || !notionService) {
     console.error('[ERROR] Required services not available');
-    const errorMessage = {
-      type: 'text',
-      text: '⚠️ システムの一部が利用できません。しばらく時間をおいてから再度お試しください。'
-    };
     try {
-      await lineClient.replyMessage(event.replyToken, errorMessage);
+      await lineClient.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '⚠️ システムの一部が利用できません。しばらく時間をおいてから再度お試しください。'
+      });
     } catch (replyError) {
       console.error('[ERROR] Failed to send service unavailable reply:', replyError);
     }
@@ -132,8 +123,31 @@ async function handleEvent(event) {
   }
 
   try {
-    // 処理開始の通知
-    console.log('[PROCESSING] Starting analysis and page creation...');
+    // 🚀 【改善点1】即座に「処理中」メッセージを返信
+    console.log('[QUICK] Sending immediate response...');
+    await lineClient.replyMessage(event.replyToken, {
+      type: 'text',
+      text: '🤖 分析中です...\n少々お待ちください（約5-10秒）'
+    });
+
+    // 🚀 【改善点2】バックグラウンドで非同期処理を開始
+    processInBackground(userId, userText);
+
+  } catch (error) {
+    console.error('[ERROR] Failed to send immediate response:', error);
+    
+    // エラーの場合は処理済みマークを削除
+    processedEvents.delete(eventId);
+    processedEvents.delete(messageHash);
+    processedEvents.delete(emergencyKey);
+  }
+}
+
+// 🚀 【新機能】バックグラウンド処理関数
+async function processInBackground(userId, userText) {
+  try {
+    console.log('[BACKGROUND] Starting analysis and page creation...');
+    const startTime = Date.now();
     
     // Geminiでテキストを解析
     console.log('[GEMINI] Analyzing text...');
@@ -143,156 +157,149 @@ async function handleEvent(event) {
     console.log('[NOTION] Creating page...');
     const notionPage = await notionService.createPageFromAnalysis(analysisResult);
 
-    // 詳細な成功通知を作成
-    console.log(`[LINE] Creating success message with actual Notion values`);
-
     // Notionに実際に登録された値を取得
     const actualProps = await notionService.getPageProperties(notionPage.id);
 
-    // 新しい形式での詳細な応答メッセージを作成
-    function createDetailedReplyMessage(analysisResult, notionPage, actualProps) {
-      const props = analysisResult.properties;
-      
-      let replyText = `✅ プロジェクトを登録しました！\n\n`;
-      
-      // タイトル（新形式）
-      replyText += `📝 タイトル\n${props.Name}\n\n`;
-      
-      // 優先度
-      if (actualProps.優先度 && actualProps.優先度 !== '(空欄)' && actualProps.優先度 !== null) {
-        replyText += `⭐ 優先度: ${actualProps.優先度}\n`;
-      } else {
-        replyText += `⭐ 優先度: (空欄)\n`;
-      }
-      
-      // 種別
-      if (actualProps.種別 && actualProps.種別 !== '(空欄)' && actualProps.種別 !== null) {
-        replyText += `🏷️ 種別: ${actualProps.種別}\n`;
-      } else {
-        replyText += `🏷️ 種別: (空欄)\n`;
-      }
-      
-      // レベル
-      if (actualProps.レベル && actualProps.レベル !== '(空欄)' && actualProps.レベル !== null) {
-        replyText += `🎚️ レベル: ${actualProps.レベル}\n`;
-      } else {
-        replyText += `🎚️ レベル: (空欄)\n`;
-      }
-      
-      // 成果物
-      if (actualProps.成果物 && actualProps.成果物 !== '(空欄)' && actualProps.成果物 !== null) {
-        replyText += `📦 成果物: ${actualProps.成果物}\n`;
-      } else {
-        replyText += `📦 成果物: (空欄)\n`;
-      }
-      
-      // 担当者
-      if (actualProps.担当者 && actualProps.担当者 !== '(空欄)' && actualProps.担当者 !== null) {
-        replyText += `👤 担当者: ${actualProps.担当者}\n`;
-      } else {
-        replyText += `👤 担当者: (空欄)\n`;
-      }
-      
-      // 期限
-      if (actualProps.期限 && actualProps.期限 !== '(空欄)' && actualProps.期限 !== null) {
-        replyText += `🗓️ 期限: ${actualProps.期限}\n`;
-      } else {
-        replyText += `🗓️ 期限: (空欄)\n`;
-      }
-      
-      // 案件
-      if (actualProps.案件 && actualProps.案件 !== '(空欄)' && actualProps.案件 !== null) {
-        replyText += `💼 案件: ${actualProps.案件}\n`;
-      } else {
-        replyText += `💼 案件: (空欄)\n`;
-      }
-      
-      replyText += `\n`;
-      
-      // WBS提案の表示
-      if (analysisResult.pageContent && analysisResult.pageContent.trim()) {
-        replyText += `📋 WBS案:\n`;
-        
-        const wbsSummary = extractWBSSummary(analysisResult.pageContent);
-        if (wbsSummary.length > 0) {
-          wbsSummary.forEach((item, index) => {
-            if (index < 6) {
-              replyText += `${index + 1}. ${item}\n`;
-            }
-          });
-          if (wbsSummary.length > 6) {
-            replyText += `... 他${wbsSummary.length - 6}項目\n`;
-          }
-        } else {
-          replyText += `詳細な実行計画が作成されました\n`;
-        }
-        replyText += `\n`;
-      }
-      
-      replyText += `🔗 詳細: ${notionPage.url}`;
-      return replyText;
-    }
+    const endTime = Date.now();
+    const processingTime = endTime - startTime;
+    console.log(`[PERFORMANCE] Total processing time: ${processingTime}ms`);
 
-    // WBS要約抽出関数
-    function extractWBSSummary(pageContent) {
-      const items = [];
-      
-      const checklistMatches = pageContent.match(/- \[ \] (.+)/g);
-      if (checklistMatches) {
-        checklistMatches.forEach(match => {
-          const item = match.replace('- [ ] ', '').trim();
-          if (item.length > 0 && item.length < 50) {
-            items.push(item);
-          }
-        });
-      }
-      
-      if (items.length === 0) {
-        const phaseMatches = pageContent.match(/#### (.+)/g);
-        if (phaseMatches) {
-          phaseMatches.forEach(match => {
-            const phase = match.replace('#### ', '').trim();
-            if (phase.length > 0 && phase.length < 50) {
-              items.push(phase);
-            }
-          });
-        }
-      }
-      
-      return items;
-    }
-
-    const replyText = createDetailedReplyMessage(analysisResult, notionPage, actualProps);
-
-    const replyMessage = {
+    // 🚀 【改善点3】完了後に詳細結果をプッシュメッセージで送信
+    const detailedMessage = createDetailedReplyMessage(analysisResult, notionPage, actualProps);
+    
+    await lineClient.pushMessage(userId, {
       type: 'text',
-      text: replyText
-    };
+      text: detailedMessage
+    });
 
-    await lineClient.replyMessage(event.replyToken, replyMessage);
-
-    console.log('[SUCCESS] Event processed successfully with detailed notification');
+    console.log('[SUCCESS] Background processing completed');
 
   } catch (error) {
-    console.error('[ERROR] Failed to handle event:', error);
+    console.error('[BACKGROUND ERROR] Failed to process in background:', error);
     
-    // エラーの場合は処理済みマークを削除（再試行可能にする）
-    processedEvents.delete(eventId);
-    processedEvents.delete(messageHash);
-    processedEvents.delete(emergencyKey); // 緊急キーも削除
-    
-    // エラーが発生したことをLINEに通知
-    const errorMessage = {
-      type: 'text',
-      text: `❌ エラーが発生しました。\n大変お手数ですが、再度お試しください。\n\n詳細: ${error.message}`
-    };
-    // エラー時はいつでもリプライできるとは限らないので、try-catchで囲む
+    // エラー時はユーザーに通知
     try {
-      await lineClient.replyMessage(event.replyToken, errorMessage);
-    } catch (replyError) {
-      console.error('[ERROR] Failed to send error reply to LINE:', replyError);
+      await lineClient.pushMessage(userId, {
+        type: 'text',
+        text: `❌ 分析中にエラーが発生しました。\n再度お試しください。\n\n詳細: ${error.message}`
+      });
+    } catch (pushError) {
+      console.error('[ERROR] Failed to send error notification:', pushError);
     }
   }
+}
+
+// 詳細応答メッセージ作成関数
+function createDetailedReplyMessage(analysisResult, notionPage, actualProps) {
+  const props = analysisResult.properties;
+  
+  let replyText = `✅ プロジェクトを登録しました！\n\n`;
+  
+  // タイトル
+  replyText += `📝 タイトル\n${props.Name}\n\n`;
+  
+  // 優先度
+  if (actualProps.優先度 && actualProps.優先度 !== '(空欄)' && actualProps.優先度 !== null) {
+    replyText += `⭐ 優先度: ${actualProps.優先度}\n`;
+  } else {
+    replyText += `⭐ 優先度: (空欄)\n`;
+  }
+  
+  // 種別
+  if (actualProps.種別 && actualProps.種別 !== '(空欄)' && actualProps.種別 !== null) {
+    replyText += `🏷️ 種別: ${actualProps.種別}\n`;
+  } else {
+    replyText += `🏷️ 種別: (空欄)\n`;
+  }
+  
+  // レベル
+  if (actualProps.レベル && actualProps.レベル !== '(空欄)' && actualProps.レベル !== null) {
+    replyText += `🎚️ レベル: ${actualProps.レベル}\n`;
+  } else {
+    replyText += `🎚️ レベル: (空欄)\n`;
+  }
+  
+  // 成果物
+  if (actualProps.成果物 && actualProps.成果物 !== '(空欄)' && actualProps.成果物 !== null) {
+    replyText += `📦 成果物: ${actualProps.成果物}\n`;
+  } else {
+    replyText += `📦 成果物: (空欄)\n`;
+  }
+  
+  // 担当者
+  if (actualProps.担当者 && actualProps.担当者 !== '(空欄)' && actualProps.担当者 !== null) {
+    replyText += `👤 担当者: ${actualProps.担当者}\n`;
+  } else {
+    replyText += `👤 担当者: (空欄)\n`;
+  }
+  
+  // 期限
+  if (actualProps.期限 && actualProps.期限 !== '(空欄)' && actualProps.期限 !== null) {
+    replyText += `🗓️ 期限: ${actualProps.期限}\n`;
+  } else {
+    replyText += `🗓️ 期限: (空欄)\n`;
+  }
+  
+  // 案件
+  if (actualProps.案件 && actualProps.案件 !== '(空欄)' && actualProps.案件 !== null) {
+    replyText += `💼 案件: ${actualProps.案件}\n`;
+  } else {
+    replyText += `💼 案件: (空欄)\n`;
+  }
+  
+  replyText += `\n`;
+  
+  // WBS提案の表示
+  if (analysisResult.pageContent && analysisResult.pageContent.trim()) {
+    replyText += `📋 WBS案:\n`;
+    
+    const wbsSummary = extractWBSSummary(analysisResult.pageContent);
+    if (wbsSummary.length > 0) {
+      wbsSummary.forEach((item, index) => {
+        if (index < 6) {
+          replyText += `${index + 1}. ${item}\n`;
+        }
+      });
+      if (wbsSummary.length > 6) {
+        replyText += `... 他${wbsSummary.length - 6}項目\n`;
+      }
+    } else {
+      replyText += `詳細な実行計画が作成されました\n`;
+    }
+    replyText += `\n`;
+  }
+  
+  replyText += `🔗 詳細: ${notionPage.url}`;
+  return replyText;
+}
+
+// WBS要約抽出関数
+function extractWBSSummary(pageContent) {
+  const items = [];
+  
+  const checklistMatches = pageContent.match(/- \[ \] (.+)/g);
+  if (checklistMatches) {
+    checklistMatches.forEach(match => {
+      const item = match.replace('- [ ] ', '').trim();
+      if (item.length > 0 && item.length < 50) {
+        items.push(item);
+      }
+    });
+  }
+  
+  if (items.length === 0) {
+    const phaseMatches = pageContent.match(/#### (.+)/g);
+    if (phaseMatches) {
+      phaseMatches.forEach(match => {
+        const phase = match.replace('#### ', '').trim();
+        if (phase.length > 0 && phase.length < 50) {
+          items.push(phase);
+        }
+      });
+    }
+  }
+  
+  return items;
 }
 
 // --- 3. Webhookエンドポイントの設定 ---
@@ -310,7 +317,8 @@ app.get("/", (req, res) => {
     },
     cache: {
       processedEvents: processedEvents.size
-    }
+    },
+    version: "2.1.0-fast-response"
   });
 });
 
@@ -379,13 +387,17 @@ app.post('/webhook', (req, res) => {
           return res.status(401).send('Invalid signature');
         }
 
-        // イベント処理
-        console.log(`[WEBHOOK] Processing ${requestBody.events.length} events...`);
+        // 🚀 【改善点4】イベント処理を高速化
+        console.log(`[WEBHOOK] Processing ${requestBody.events.length} events (fast mode)...`);
         for (const event of requestBody.events) {
-          await handleEvent(event);
+          // 非同期で処理（レスポンスを待たない）
+          handleEvent(event).catch(error => {
+            console.error('[WEBHOOK] Event processing error:', error);
+          });
         }
 
-        console.log('[WEBHOOK] Events processed successfully');
+        // 即座にOKレスポンスを返す
+        console.log('[WEBHOOK] Events queued for processing');
         res.status(200).send('OK');
 
         
@@ -421,8 +433,8 @@ app.listen(PORT, () => {
   console.log('==================================================');
   console.log(`         🚀 Server running on port ${PORT}`);
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log('  Ready to receive LINE webhook requests!');
-  console.log('  ✨ Deduplication feature enabled');
-  console.log('  🤖 Using Gemini 2.5 Pro for analysis');
+  console.log('  ✨ Fast response mode enabled!');
+  console.log('  🤖 Using Gemini 2.5 Pro with async processing');
+  console.log('  ⚡ Immediate response + Background analysis');
   console.log('==================================================');
 });
