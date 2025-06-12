@@ -85,26 +85,25 @@ class ProjectAnalyzer {
 
 JSON形式で出力してください：`;
 
-      console.log('🤖 Using model: gemini-2.5-flash-preview-05-20');
+      console.log('🤖 Using model: gemini-2.5-flash (optimized for speed and quality)');
       
-      // Gemini 2.5 Proモデルを使用
+      // 🚀 Gemini 2.5 Flash - 最新で高速なモデル
       const model = this.gemini.getGenerativeModel({ 
-        model: "gemini-2.5-flash-preview-05-20",  // ← ここを変更
+        model: "gemini-2.5-flash",  // ← 最新のGemini 2.5 Flash
         generationConfig: {
-          temperature: 0.1,
-          topK: 10,
+          temperature: 0.2,        // 少し上げて品質とのバランス
+          topK: 20,               // 速度と品質のバランス
+          topP: 0.8,              // 応答の一貫性向上
           maxOutputTokens: 1024,
-          thinking_config: {
-            thinking_budget: 0  // 低コストモード
-          }
+          // thinking_configは削除（2.5 flashでは不要）
         }
       });
 
-      // タイムアウト付きで実行
+      // 🚀 タイムアウトを4秒に調整（2.5の処理時間を考慮）
       const result = await Promise.race([
         model.generateContent(systemPrompt),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Gemini API timeout')), 5000)
+          setTimeout(() => reject(new Error('Gemini API timeout')), 4000)  // ← 4秒に調整
         )
       ]);
       
