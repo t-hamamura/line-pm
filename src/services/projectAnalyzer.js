@@ -137,11 +137,11 @@ const systemPrompt = `
 
 JSON形式で出力してください：`;
 
-      console.log('🤖 Using model: gemini-2.5-flash (最新高性能モデル)');
+      console.log('🤖 Using model: gemini-2.5-flash-preview-05-20 (最新高性能モデル)');
       
       // 🚀 Gemini 2.5 Flash - 最新で最も高性能なモデル
       const model = this.gemini.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
+        model: "gemini-2.5-flash-preview-05-20",
         generationConfig: {
           temperature: 0.2,        // 2.5では低めに設定（一貫性重視）
           topK: 20,               // 品質重視
