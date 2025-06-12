@@ -115,20 +115,38 @@ JSON形式で出力してください：`;
       const response = await result.response;
       let jsonString = response.text().trim();
       
-      // JSONの清理
+      // JSONの清理（Gemini 2.5 Flash対応）
       jsonString = this.cleanJsonResponse(jsonString);
       
       let parsedResult;
       try {
         parsedResult = JSON.parse(jsonString);
+        console.log('✅ Successfully parsed Gemini 2.5 Flash response');
         
         // pageContentが空の場合は自動生成
         if (!parsedResult.pageContent || parsedResult.pageContent.trim() === '') {
+          console.log('⚠️ Empty pageContent detected, generating WBS...');
           parsedResult.pageContent = this.generateWBS(text);
         }
         
+        // プロパティの検証
+        if (!parsedResult.properties) {
+          console.log('⚠️ Missing properties, creating default structure...');
+          parsedResult.properties = {
+            ステータス: "未分類",
+            種別: null,
+            優先度: null,
+            期限: null,
+            成果物: null,
+            レベル: null,
+            案件: null,
+            担当者: null
+          };
+        }
+        
       } catch (parseError) {
-        console.warn('JSON parse failed, using enhanced fallback...', parseError);
+        console.warn('JSON parse failed with Gemini 2.5 Flash, using enhanced fallback...', parseError);
+        console.log('Raw response:', jsonString.substring(0, 200) + '...');
         parsedResult = this.createEnhancedFallbackResponse(text);
       }
       
