@@ -409,9 +409,9 @@ JSON形式で出力してください：`;
     }
   }
 
-  // 強化されたフォールバック応答
+// Gemini 2.5対応の厳格なフォールバック応答
   createEnhancedFallbackResponse(text) {
-    console.log('🔄 Creating enhanced fallback response...');
+    console.log('🔄 Creating enhanced fallback response for Gemini 2.5 Flash');
     const textLower = text.toLowerCase();
     
     // 基本構造（nullベース）
@@ -510,8 +510,24 @@ JSON形式で出力してください：`;
       pageContent: this.generateWBS(text)
     };
 
-    console.log('✅ Fallback response created successfully');
+    console.log('✅ Enhanced fallback response created (Gemini 2.5 compatible)');
     return fallbackResponse;
+  }
+
+  // レート制限状況の取得
+  getRateLimitStatus() {
+    return {
+      rpm: {
+        current: this.requestCount,
+        limit: 8,
+        resetTime: this.resetTime
+      },
+      rpd: {
+        current: this.dailyCount,
+        limit: 450,
+        resetTime: this.dailyResetTime
+      }
+    };
   }
 }
 
