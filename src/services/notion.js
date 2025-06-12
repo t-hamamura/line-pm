@@ -179,10 +179,10 @@ class NotionService {
       // 現在の日付を設定
       const today = new Date().toISOString().split('T')[0];
       
-      // 各プロパティを動的にマッピング（新しいテーブル構造に対応）
+      // 各プロパティを動的にマッピング（絵文字なしバージョン）
       const valueMap = {
         '記入日': today,
-        'ステータス': properties.ステータス || '📥 未分類'  // ステータスは常に設定
+        'ステータス': properties.ステータス || '未分類'  // デフォルトは「未分類」（絵文字なし）
       };
 
       // nullでない場合のみvalueMapに追加（ステータス以外）
@@ -224,8 +224,20 @@ class NotionService {
                 console.log(`[NOTION] Available options: ${selectOptions.map(opt => opt.name).join(', ')}`);
                 // デフォルト値を使用
                 if (selectOptions.length > 0) {
-                  notionProperties[propName] = { select: { name: selectOptions[0].name } };
-                  console.log(`[NOTION] ✅ Using default: ${propName} = ${selectOptions[0].name}`);
+                  // ステータスの場合はデフォルトを「未分類」に
+                  if (propName === 'ステータス') {
+                    const defaultStatus = selectOptions.find(opt => opt.name === '未分類');
+                    if (defaultStatus) {
+                      notionProperties[propName] = { select: { name: '未分類' } };
+                      console.log(`[NOTION] ✅ Using default status: ${propName} = 未分類`);
+                    } else {
+                      notionProperties[propName] = { select: { name: selectOptions[0].name } };
+                      console.log(`[NOTION] ✅ Using first available: ${propName} = ${selectOptions[0].name}`);
+                    }
+                  } else {
+                    notionProperties[propName] = { select: { name: selectOptions[0].name } };
+                    console.log(`[NOTION] ✅ Using default: ${propName} = ${selectOptions[0].name}`);
+                  }
                 }
               }
               break;
@@ -257,8 +269,17 @@ class NotionService {
               } else {
                 console.log(`[NOTION] ⚠️ Value "${value}" not found in status options for ${propName}`);
                 console.log(`[NOTION] Available options: ${statusOptions.map(opt => opt.name).join(', ')}`);
-                // デフォルト値を使用
-                if (statusOptions.length > 0) {
+                // デフォルト値を使用（ステータスの場合は「未分類」を優先）
+                if (propName === 'ステータス') {
+                  const defaultStatus = statusOptions.find(opt => opt.name === '未分類');
+                  if (defaultStatus) {
+                    notionProperties[propName] = { status: { name: '未分類' } };
+                    console.log(`[NOTION] ✅ Using default status: ${propName} = 未分類`);
+                  } else if (statusOptions.length > 0) {
+                    notionProperties[propName] = { status: { name: statusOptions[0].name } };
+                    console.log(`[NOTION] ✅ Using first available: ${propName} = ${statusOptions[0].name}`);
+                  }
+                } else if (statusOptions.length > 0) {
                   notionProperties[propName] = { status: { name: statusOptions[0].name } };
                   console.log(`[NOTION] ✅ Using default: ${propName} = ${statusOptions[0].name}`);
                 }
@@ -431,7 +452,7 @@ class NotionService {
     };
   }
 
-  // 🔧 ここに正しく追加
+  // 実際の値を確認（絵文字なしバージョン）
   async getPageProperties(pageId) {
     try {
       console.log(`[NOTION] 実際の値を確認中: ${pageId}`);
@@ -452,9 +473,16 @@ class NotionService {
         switch (propData.type) {
           case 'select':
             if (propName === 'ステータス') {
-              result[propName] = propData.select?.name || '📥 未分類';
+              result[propName] = propData.select?.name || '未分類';
             } else {
               result[propName] = propData.select?.name || null;
+            }
+            break;
+          case 'status':
+            if (propName === 'ステータス') {
+              result[propName] = propData.status?.name || '未分類';
+            } else {
+              result[propName] = propData.status?.name || null;
             }
             break;
           case 'date':
@@ -469,7 +497,7 @@ class NotionService {
             break;
           default:
             if (propName === 'ステータス') {
-              result[propName] = '📥 未分類';
+              result[propName] = '未分類';
             } else {
               result[propName] = null;
             }
