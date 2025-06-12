@@ -85,7 +85,7 @@ class ProjectAnalyzer {
 
 JSON形式で出力してください：`;
 
-      console.log('🤖 Using model: gemini-2.5-pro');
+      console.log('🤖 Using model: gemini-2.5-flash-preview-05-20');
       
       // Gemini 2.5 Proモデルを使用
       const model = this.gemini.getGenerativeModel({ 
