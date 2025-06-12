@@ -2,12 +2,24 @@ const { GoogleGenAI } = require('@google/genai');
 
 class ProjectAnalyzer {
   constructor() {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not set in environment variables.');
-    }
+  // 認証方法を判定して適切に初期化
+  if (process.env.GEMINI_API_KEY) {
+    // Gemini Developer API使用
     this.genai = new GoogleGenAI({ 
       apiKey: process.env.GEMINI_API_KEY 
     });
+    console.log('🔑 Using Gemini Developer API');
+  } else if (process.env.GOOGLE_CLOUD_PROJECT) {
+    // Vertex AI使用
+    this.genai = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT,
+      location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
+    });
+    console.log('☁️ Using Vertex AI');
+  } else {
+    throw new Error('No valid authentication configured for Gemini API');
+  }
 
     // レート制限設定を正確に
     this.tier = process.env.GEMINI_API_TIER || 'free';
