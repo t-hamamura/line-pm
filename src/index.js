@@ -432,7 +432,7 @@ app.get("/debug", (req, res) => {
       total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
     },
     gemini: {
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash-preview-05-20',
       rateLimits: projectAnalyzer ? projectAnalyzer.getRateLimitStatus() : null,
       status: projectAnalyzer ? 'Available' : 'Not Available'
     },
