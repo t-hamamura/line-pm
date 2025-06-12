@@ -51,19 +51,46 @@ try {
 // サービスの初期化（エラーハンドリング付き）
 try {
     projectAnalyzer = require("./services/projectAnalyzer");
-    console.log('✅ Project analyzer loaded');
+    console.log('✅ Project analyzer loaded successfully');
+    console.log('🔑 GEMINI_API_KEY status:', process.env.GEMINI_API_KEY ? 'Set' : 'Missing');
 } catch (error) {
     console.error('❌ Failed to load project analyzer:', error.message);
+    console.error('📋 Details:', error.stack);
     projectAnalyzer = null;
 }
 
 try {
     notionService = require('./services/notion');
-    console.log('✅ Notion service loaded');
+    console.log('✅ Notion service loaded successfully');
+    console.log('🔑 NOTION_API_KEY status:', process.env.NOTION_API_KEY ? 'Set' : 'Missing');
+    console.log('🔑 NOTION_DATABASE_ID status:', process.env.NOTION_DATABASE_ID ? 'Set' : 'Missing');
 } catch (error) {
     console.error('❌ Failed to load notion service:', error.message);
+    console.error('📋 Details:', error.stack);
     notionService = null;
 }
+
+// サービス状態の詳細ログ
+console.log('📊 Service Status Summary:');
+console.log(`  - Project Analyzer: ${projectAnalyzer ? '✅ Ready' : '❌ Failed'}`);
+console.log(`  - Notion Service: ${notionService ? '✅ Ready' : '❌ Failed'}`);
+console.log(`  - LINE Client: ${lineClient ? '✅ Ready' : '❌ Failed'}`);
+
+// 環境変数チェック
+const requiredEnvVars = [
+  'LINE_CHANNEL_ACCESS_TOKEN',
+  'LINE_CHANNEL_SECRET', 
+  'GEMINI_API_KEY',
+  'NOTION_API_KEY',
+  'NOTION_DATABASE_ID'
+];
+
+console.log('🔍 Environment Variables Check:');
+requiredEnvVars.forEach(varName => {
+  const status = process.env[varName] ? '✅ Set' : '❌ Missing';
+  const preview = process.env[varName] ? `${process.env[varName].substring(0, 8)}...` : 'Not set';
+  console.log(`  - ${varName}: ${status} (${preview})`);
+});
 
 // --- 2. 高速化されたメイン処理フロー ---
 
@@ -111,10 +138,24 @@ async function handleEvent(event) {
   // サービスが利用できない場合の処理
   if (!projectAnalyzer || !notionService) {
     console.error('[ERROR] Required services not available');
+    console.error(`[ERROR] Project Analyzer: ${projectAnalyzer ? 'Available' : 'NOT AVAILABLE'}`);
+    console.error(`[ERROR] Notion Service: ${notionService ? 'Available' : 'NOT AVAILABLE'}`);
+    
+    // 詳細なエラーメッセージを生成
+    let errorDetails = [];
+    if (!projectAnalyzer) {
+      errorDetails.push('AI分析サービス (Gemini API)');
+    }
+    if (!notionService) {
+      errorDetails.push('Notionサービス');
+    }
+    
+    const detailedErrorMessage = `⚠️ システムの一部が利用できません。\n\n❌ 利用できないサービス:\n${errorDetails.map(service => `  • ${service}`).join('\n')}\n\n🔧 システム管理者に連絡してください。\n⏰ 時間をおいて再度お試しください。`;
+    
     try {
       await lineClient.replyMessage(event.replyToken, {
         type: 'text',
-        text: '⚠️ システムの一部が利用できません。しばらく時間をおいてから再度お試しください。'
+        text: detailedErrorMessage
       });
     } catch (replyError) {
       console.error('[ERROR] Failed to send service unavailable reply:', replyError);
@@ -181,14 +222,40 @@ async function processInBackground(userId, userText) {
     let errorMessage = '❌ 分析中にエラーが発生しました。';
     
     if (error.message.includes('rate limit') || error.message.includes('quota')) {
-      errorMessage += '\n⚠️ 現在、AI分析サービスの利用上限に達しています。\n少し時間をおいてから再度お試しください。';
+      errorMessage = `🤖 Gemini 2.5 Flash AIの利用上限に達しました。
+      
+📊 **制限情報**
+• 1分間: 10回まで
+• 1日: 500回まで
+
+⏰ **対処法**
+• 1-2分お待ちください
+• しばらく時間をおいてから再度お試しください
+
+✨ 高品質なAI分析のため、制限を設けています。ご理解ください。`;
     } else if (error.message.includes('timeout')) {
-      errorMessage += '\n⏰ 処理に時間がかかっています。\n再度お試しいただくか、より簡潔な内容でお試しください。';
+      errorMessage = `⏰ Gemini 2.5 Flash AIの処理に時間がかかっています。
+
+🔄 **対処法**
+• より簡潔な内容でお試しください
+• 再度お試しください
+
+💡 複雑な内容ほど時間がかかる場合があります。`;
+    } else if (error.message.includes('model not found')) {
+      errorMessage = `🤖 Gemini 2.5 Flash AIモデルにアクセスできません。
+
+🔧 **システム側の問題です**
+• システム管理者が確認中です
+• しばらく時間をおいてから再度お試しください`;
     } else {
-      errorMessage += '\n再度お試しください。';
+      errorMessage += `\n\n🔄 **再試行のお願い**
+• 再度お試しください
+• 問題が続く場合はシステム管理者にご連絡ください
+
+💡 Gemini 2.5 Flash AI使用中のため、高品質な分析を提供しています。`;
     }
     
-    // エラー時はユーザーに通知
+    // エラー時はユーザーに詳細な通知
     try {
       await lineClient.pushMessage(userId, {
         type: 'text',
@@ -333,6 +400,59 @@ app.get("/", (req, res) => {
   });
 });
 
+// デバッグ用エンドポイント
+app.get("/debug", (req, res) => {
+  console.log('[DEBUG] Debug endpoint requested');
+  
+  const envStatus = {
+    LINE_CHANNEL_ACCESS_TOKEN: !!process.env.LINE_CHANNEL_ACCESS_TOKEN,
+    LINE_CHANNEL_SECRET: !!process.env.LINE_CHANNEL_SECRET,
+    GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+    NOTION_API_KEY: !!process.env.NOTION_API_KEY,
+    NOTION_DATABASE_ID: !!process.env.NOTION_DATABASE_ID
+  };
+
+  const serviceStatus = {
+    projectAnalyzer: !!projectAnalyzer,
+    notionService: !!notionService,
+    lineClient: !!lineClient
+  };
+
+  const debugInfo = {
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    nodeVersion: process.version,
+    environmentVariables: envStatus,
+    services: serviceStatus,
+    cache: {
+      processedEvents: processedEvents.size
+    },
+    memory: {
+      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
+    },
+    gemini: {
+      model: 'gemini-2.5-flash',
+      rateLimits: projectAnalyzer ? projectAnalyzer.getRateLimitStatus() : null,
+      status: projectAnalyzer ? 'Available' : 'Not Available'
+    },
+    lastErrors: [] // 実装時にエラーログを追加可能
+  };
+
+  // 環境変数の値のプレビュー（セキュリティのため最初の8文字のみ）
+  const envPreviews = {};
+  Object.keys(envStatus).forEach(key => {
+    if (process.env[key]) {
+      envPreviews[key] = process.env[key].substring(0, 8) + '...';
+    } else {
+      envPreviews[key] = 'NOT_SET';
+    }
+  });
+  debugInfo.environmentPreviews = envPreviews;
+
+  res.status(200).json(debugInfo);
+});
+
 // 処理済みイベントのクリア用エンドポイント（デバッグ用）
 app.post('/clear-cache', (req, res) => {
   const previousSize = processedEvents.size;
@@ -445,8 +565,9 @@ app.listen(PORT, () => {
   console.log(`         🚀 Server running on port ${PORT}`);
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('  ✨ Fast response mode enabled!');
-  console.log('  🤖 Using Gemini 2.5 Flash with optimized processing');
+  console.log('  🤖 Using Gemini 2.5 Flash (最新高性能AIモデル)');
   console.log('  ⚡ Immediate response + Background analysis');
   console.log('  📊 Rate limits: RPM 10, TPM 250K, RPD 500');
+  console.log('  🎯 High-quality AI analysis with rate limiting');
   console.log('==================================================');
 });
