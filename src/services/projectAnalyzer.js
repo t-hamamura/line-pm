@@ -6,10 +6,56 @@ class ProjectAnalyzer {
       throw new Error('GEMINI_API_KEY is not set in environment variables.');
     }
     this.gemini = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    
+    // レート制限管理
+    this.requestCount = 0;
+    this.resetTime = Date.now() + 60000; // 1分後
+    this.dailyCount = 0;
+    this.dailyResetTime = Date.now() + 24 * 60 * 60 * 1000; // 24時間後
+  }
+
+  // レート制限チェック
+  canMakeRequest() {
+    const now = Date.now();
+    
+    // 1分あたりの制限をリセット
+    if (now > this.resetTime) {
+      this.requestCount = 0;
+      this.resetTime = now + 60000;
+      console.log('🔄 Rate limit counter reset (RPM)');
+    }
+    
+    // 1日あたりの制限をリセット
+    if (now > this.dailyResetTime) {
+      this.dailyCount = 0;
+      this.dailyResetTime = now + 24 * 60 * 60 * 1000;
+      console.log('🔄 Daily limit counter reset (RPD)');
+    }
+    
+    // 制限チェック（安全のため少し余裕を持たせる）
+    const canRequest = this.requestCount < 8 && this.dailyCount < 450; // 10→8, 500→450
+    
+    if (!canRequest) {
+      console.log(`📊 Rate limit status: RPM ${this.requestCount}/8, RPD ${this.dailyCount}/450`);
+    }
+    
+    return canRequest;
+  }
+
+  recordRequest() {
+    this.requestCount++;
+    this.dailyCount++;
+    console.log(`📊 Request recorded: RPM ${this.requestCount}/8, RPD ${this.dailyCount}/450`);
   }
 
   async analyzeText(text) {
     try {
+      // レート制限チェック
+      if (!this.canMakeRequest()) {
+        console.warn('⚠️ Rate limit approaching, using fallback immediately');
+        return this.createEnhancedFallbackResponse(text);
+      }
+
 const systemPrompt = `
 あなたはマーケティング・コンサルティングに関するプロジェクト管理の専門家です。以下の入力を分析し、今すぐに実行可能なレベルに細分化されたWBSを含むプロジェクト情報を作成してください。
 
@@ -70,15 +116,15 @@ const systemPrompt = `
 
 ## 案件（キーワード含む時のみ）
 - "ONEマーケ/マーケラボ": ONEマーケ/マーケラボ
+- "ONLYONE": ONLYONE/オンリーワン
 - "るい/redeal.": るい/redeal/リディアル
-- "アンズボーテ": アンズボーテ
-- "池袋サンシャイン美容外科": 池袋/サンシャイン
 - "femuse": femuse/フェミューズ
+- "アンズボーテ": アンズボーテ
+- "neam": neam/ニーム
 - "SPIRITS": spirits/スピリッツ
 - "TalkLabel": talklabel/トークラベル
+- "池袋サンシャイン美容外科": 池袋/サンシャイン
 - "JUNOa": junoa/ユノア
-- "neam": neam/ニーム
-- "ONLYONE": ONLYONE/オンリーワン
 
 ## 期限
 日付明記時のみYYYY-MM-DD形式
@@ -91,31 +137,38 @@ const systemPrompt = `
 
 JSON形式で出力してください：`;
 
-      console.log('🤖 Using model: gemini-2.5-flash (latest high-performance model)');
+      console.log('🤖 Using model: gemini-2.5-flash (最新高性能モデル)');
       
       // 🚀 Gemini 2.5 Flash - 最新で最も高性能なモデル
       const model = this.gemini.getGenerativeModel({ 
         model: "gemini-2.5-flash",
         generationConfig: {
-          temperature: 0.1,        // 2.5では低めに設定（一貫性重視）
-          topK: 15,               // 少し減らして品質重視
-          topP: 0.7,              // 精度を上げるため少し下げる
+          temperature: 0.2,        // 2.5では低めに設定（一貫性重視）
+          topK: 20,               // 品質重視
+          topP: 0.8,              // 精度を保ちつつ多様性も確保
           maxOutputTokens: 1024,
         }
       });
 
-      // 🚀 タイムアウトを6秒に設定（2.5の処理時間を考慮）
+      console.log('📊 Gemini 2.5 Flash limits: RPM: 10, TPM: 250K, RPD: 500');
+
+      // リクエスト記録
+      this.recordRequest();
+
+      // 🚀 タイムアウトを10秒に設定（2.5は少し時間がかかる場合がある）
       const result = await Promise.race([
         model.generateContent(systemPrompt),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Gemini 2.5 Flash timeout')), 6000)  // ← 6秒に調整
+          setTimeout(() => reject(new Error('Gemini 2.5 Flash timeout')), 10000)
         )
       ]);
       
       const response = await result.response;
       let jsonString = response.text().trim();
       
-      // JSONの清理（Gemini 2.5 Flash対応）
+      console.log('✅ Gemini 2.5 Flash response received, length:', jsonString.length);
+      
+      // JSONの清理
       jsonString = this.cleanJsonResponse(jsonString);
       
       let parsedResult;
@@ -145,42 +198,68 @@ JSON形式で出力してください：`;
         }
         
       } catch (parseError) {
-        console.warn('JSON parse failed with Gemini 2.5 Flash, using enhanced fallback...', parseError);
-        console.log('Raw response:', jsonString.substring(0, 200) + '...');
+        console.warn('❌ JSON parse failed with Gemini 2.5, using enhanced fallback...', parseError.message);
+        console.log('Raw response preview:', jsonString.substring(0, 200) + '...');
         parsedResult = this.createEnhancedFallbackResponse(text);
       }
       
       // プロジェクト名を設定
       parsedResult.properties.Name = text;
 
-      console.log('✅ Analyzed data from Gemini 2.5 Pro:', JSON.stringify(parsedResult, null, 2));
+      console.log('✅ Final analyzed data from Gemini 2.5 Flash:', {
+        hasProperties: !!parsedResult.properties,
+        hasPageContent: !!parsedResult.pageContent,
+        propertiesKeys: Object.keys(parsedResult.properties || {}),
+        pageContentLength: parsedResult.pageContent?.length || 0
+      });
+      
       return parsedResult;
 
     } catch (error) {
-      console.error('❌ Error analyzing project with Gemini 2.5 Flash:', error);
+      console.error('❌ Error analyzing project with Gemini 2.5 Flash:', error.message);
 
-      // レート制限エラーの詳細ログ
+      // Gemini 2.5 Flash特有のエラー処理
       if (error.message.includes('rate limit') || error.message.includes('quota')) {
-        console.error('📊 Gemini 2.5 Flash rate limit exceeded - using fallback');
+        console.error('📊 Gemini 2.5 Flash rate limit exceeded');
         console.error('Current limits: RPM: 10, TPM: 250K, RPD: 500');
+        console.error('📋 Suggestion: Wait 1-2 minutes before trying again');
+      } else if (error.message.includes('timeout')) {
+        console.error('⏰ Gemini 2.5 Flash request timed out (10 seconds)');
+      } else if (error.message.includes('API key')) {
+        console.error('🔑 API key issue. Check environment variable GEMINI_API_KEY');
+      } else if (error.message.includes('model not found')) {
+        console.error('🤖 Gemini 2.5 Flash model not available. Check API access');
+      } else {
+        console.error('🔍 Unknown error type:', error.message);
       }
       
+      console.log('🔄 Using enhanced fallback response...');
       return this.createEnhancedFallbackResponse(text);
     }
   }
 
   // JSON応答の清理
   cleanJsonResponse(jsonString) {
+    // ```json や ``` を削除
     jsonString = jsonString.replace(/```json\s*/g, '').replace(/```\s*/g, '');
     jsonString = jsonString.trim();
+    
+    // 最初の{から開始するように調整
     const jsonStart = jsonString.indexOf('{');
     if (jsonStart > 0) {
       jsonString = jsonString.substring(jsonStart);
     }
+    
+    // 最後の}で終わるように調整
+    const jsonEnd = jsonString.lastIndexOf('}');
+    if (jsonEnd > 0 && jsonEnd < jsonString.length - 1) {
+      jsonString = jsonString.substring(0, jsonEnd + 1);
+    }
+    
     return jsonString;
   }
 
-// WBS自動生成（Gemini 2.5 Flash対応版）
+  // WBS自動生成
   generateWBS(text) {
     const textLower = text.toLowerCase();
     
@@ -330,127 +409,109 @@ JSON形式で出力してください：`;
     }
   }
 
-// Gemini 2.5 Flash対応の厳格なフォールバック応答
-createEnhancedFallbackResponse(text) {
-  console.log('🔄 Creating enhanced fallback response for Gemini 2.5 Flash');
-  const textLower = text.toLowerCase();
-  
-  // 絵文字なしの値を使用（2.5 Flash推奨）
-  let priority = null;
-  let type = null;
-  let level = null;
-  let deliverable = null;
-  let project = null;
-  let deadline = null;
-  let assignee = null;
-  
-  // 優先度判定 - 明確に記載されている場合のみ
-  if (textLower.includes('緊急') || textLower.includes('至急') || textLower.includes('急ぎ')) {
-    priority = "緊急";
-  } else if (textLower.includes('重要') && textLower.match(/重要(?![な])/)) {
-    // 「重要な〜」ではなく「重要」単体の場合のみ
-    priority = "重要";
-  } else if (textLower.includes('普通')) {
-    priority = "普通";
-  } else if (textLower.includes('アイデア')) {
-    priority = "アイデア";
-  }
-  // その他の場合は一切推測しない
-  
-  // 種別判定 - 極めて明確な場合のみ
-  if (textLower.includes('戦略策定') || textLower.includes('企画立案')) {
-    type = "企画・戦略";
-  } else if ((textLower.includes('hp') || textLower.includes('ホームページ') || textLower.includes('webサイト')) && 
-             textLower.includes('制作')) {
-    type = "制作・開発";
-    deliverable = "コンテンツ";
-  } else if (textLower.includes('システム開発') || textLower.includes('アプリ開発')) {
-    type = "制作・開発";
-    deliverable = "システム・ツール";
-  } else if (textLower.includes('データ分析') || textLower.includes('効果測定')) {
-    type = "分析・改善";
-    deliverable = "レポート";
-  } else if (textLower.includes('キャンペーン実行') || textLower.includes('広告運用')) {
-    type = "実行・運用";
-  } else if (textLower.includes('チーム管理') || textLower.includes('人事管理')) {
-    type = "マネジメント";
-  }
-  // 「作成」「企画」「計画」「買う」などの単語だけでは一切推測しない
-  
-  // レベル判定 - 明確に記載されている場合のみ
-  if (textLower.includes('戦略レベル')) {
-    level = "戦略レベル";
-  } else if (textLower.includes('プロジェクト')) {
-    level = "プロジェクト";
-  } else if (textLower.includes('タスク')) {
-    level = "タスク";
-  } else if (textLower.includes('アクション')) {
-    level = "アクション";
-  } else if (textLower.includes('メモ')) {
-    level = "メモ";
-  }
-  
-  // 案件判定 - キーワードが明確に含まれている場合のみ
-  if (textLower.includes('oneマーケ') || textLower.includes('マーケラボ')) {
-    project = "ONEマーケ／マーケラボ";
-  } else if (textLower.includes('redeal') || textLower.includes('リディアル') || textLower.includes('るい')) {
-    project = "るい／redeal.";
-  } else if (textLower.includes('アンズボーテ')) {
-    project = "アンズボーテ";
-  } else if (textLower.includes('池袋') || textLower.includes('サンシャイン')) {
-    project = "池袋サンシャイン美容外科";
-  } else if (textLower.includes('femuse') || textLower.includes('フェミューズ')) {
-    project = "femuse";
-  }
-  // キーワードが含まれていない場合は一切推測しない
-  
-  // 期限抽出 - 明確に日付が記載されている場合のみ
-  const dateMatches = text.match(/(\d{1,2})月(\d{1,2})日|(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})|(\d{1,2})\/(\d{1,2})/);
-  if (dateMatches) {
-    if (dateMatches[1] && dateMatches[2]) {
-      const currentYear = new Date().getFullYear();
-      const month = dateMatches[1].padStart(2, '0');
-      const day = dateMatches[2].padStart(2, '0');
-      deadline = `${currentYear}-${month}-${day}`;
-    } else if (dateMatches[3] && dateMatches[4] && dateMatches[5]) {
-      deadline = `${dateMatches[3]}-${dateMatches[4].padStart(2, '0')}-${dateMatches[5].padStart(2, '0')}`;
-    }
-  }
-
-  const fallbackResponse = {
-    properties: {
-      Name: text,
-      ステータス: "未分類",
-      種別: type,
-      優先度: priority,
-      期限: deadline,
-      成果物: deliverable,
-      レベル: level,
-      案件: project
-    },
-    pageContent: this.generateWBS(text)
-  };
-
-  console.log('🔄 Using enhanced fallback response (strict mode):', fallbackResponse);
-  return fallbackResponse;
-}
-
-  validateProjectData(data) {
-    if (!data.properties) {
-        throw new Error('"properties" field is missing from Gemini response.');
+  // 強化されたフォールバック応答
+  createEnhancedFallbackResponse(text) {
+    console.log('🔄 Creating enhanced fallback response...');
+    const textLower = text.toLowerCase();
+    
+    // 基本構造（nullベース）
+    let priority = null;
+    let type = null;
+    let level = null;
+    let deliverable = null;
+    let project = null;
+    let deadline = null;
+    let assignee = null;
+    
+    // 優先度判定 - 明確に記載されている場合のみ
+    if (textLower.includes('緊急') || textLower.includes('至急') || textLower.includes('急ぎ')) {
+      priority = "緊急";
+    } else if (textLower.includes('重要') && !textLower.includes('重要な')) {
+      priority = "重要";
+    } else if (textLower.includes('普通')) {
+      priority = "普通";
+    } else if (textLower.includes('アイデア') || textLower.includes('メモ')) {
+      priority = "アイデア";
     }
     
-    const requiredFields = ['Name', 'ステータス'];
-    const missingFields = requiredFields.filter(field => !data.properties[field]);
-    if (missingFields.length > 0) {
-      throw new Error(`必須項目が不足しています: ${missingFields.join(', ')}`);
+    // 種別判定 - 極めて明確な場合のみ
+    if (textLower.includes('戦略策定') || textLower.includes('企画立案')) {
+      type = "企画・戦略";
+    } else if (textLower.includes('制作') && (textLower.includes('hp') || textLower.includes('サイト'))) {
+      type = "制作・開発";
+      deliverable = "コンテンツ";
+    } else if (textLower.includes('システム開発') || textLower.includes('アプリ開発')) {
+      type = "制作・開発";
+      deliverable = "システム・ツール";
+    } else if (textLower.includes('データ分析') || textLower.includes('効果測定')) {
+      type = "分析・改善";
+      deliverable = "レポート";
     }
     
-    if (typeof data.pageContent !== 'string') {
-        throw new Error('pageContent must be a string.');
+    // レベル判定 - 明確に記載されている場合のみ
+    if (textLower.includes('プロジェクト')) {
+      level = "プロジェクト";
+    } else if (textLower.includes('タスク')) {
+      level = "タスク";
+    } else if (textLower.includes('アクション')) {
+      level = "アクション";
+    } else if (textLower.includes('メモ') || textLower.includes('アイデア')) {
+      level = "メモ";
+    }
+    
+    // 案件判定 - キーワードが明確に含まれている場合のみ
+    if (textLower.includes('oneマーケ') || textLower.includes('マーケラボ')) {
+      project = "ONEマーケ/マーケラボ";
+    } else if (textLower.includes('redeal') || textLower.includes('リディアル')) {
+      project = "るい/redeal.";
+    } else if (textLower.includes('池袋') || textLower.includes('サンシャイン')) {
+      project = "池袋サンシャイン美容外科";
+    } else if (textLower.includes('アンズボーテ')) {
+      project = "アンズボーテ";
+    } else if (textLower.includes('femuse') || textLower.includes('フェミューズ')) {
+      project = "femuse";
+    } else if (textLower.includes('spirits') || textLower.includes('スピリッツ')) {
+      project = "SPIRITS";
+    } else if (textLower.includes('talklabel') || textLower.includes('トークラベル')) {
+      project = "TalkLabel";
+    } else if (textLower.includes('junoa') || textLower.includes('ユノア')) {
+      project = "JUNOa";
+    } else if (textLower.includes('neam') || textLower.includes('ニーム')) {
+      project = "neam";
+    } else if (textLower.includes('onlyone') || textLower.includes('オンリーワン')) {
+      project = "ONLYONE";
+    }
+    
+    // 期限抽出 - 明確に日付が記載されている場合のみ
+    const dateMatches = text.match(/(\d{1,2})月(\d{1,2})日|(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    if (dateMatches) {
+      if (dateMatches[1] && dateMatches[2]) {
+        const currentYear = new Date().getFullYear();
+        const month = dateMatches[1].padStart(2, '0');
+        const day = dateMatches[2].padStart(2, '0');
+        deadline = `${currentYear}-${month}-${day}`;
+      } else if (dateMatches[3] && dateMatches[4] && dateMatches[5]) {
+        deadline = `${dateMatches[3]}-${dateMatches[4].padStart(2, '0')}-${dateMatches[5].padStart(2, '0')}`;
+      }
     }
 
-    return true;
+    const fallbackResponse = {
+      properties: {
+        Name: text,
+        ステータス: "未分類",
+        種別: type,
+        優先度: priority,
+        期限: deadline,
+        成果物: deliverable,
+        レベル: level,
+        案件: project,
+        担当者: assignee
+      },
+      pageContent: this.generateWBS(text)
+    };
+
+    console.log('✅ Fallback response created successfully');
+    return fallbackResponse;
   }
 }
 
