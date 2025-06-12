@@ -432,9 +432,11 @@ app.get("/debug", (req, res) => {
       total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
     },
     gemini: {
+      sdk: '@google/genai',
+      version: '1.4.0',
       model: 'gemini-2.5-flash-preview-05-20',
       rateLimits: projectAnalyzer ? projectAnalyzer.getRateLimitStatus() : null,
-      status: projectAnalyzer ? 'Available' : 'Not Available'
+      status: projectAnalyzer ? 'Available (New SDK)' : 'Not Available'
     },
     lastErrors: [] // 実装時にエラーログを追加可能
   };
@@ -565,9 +567,10 @@ app.listen(PORT, () => {
   console.log(`         🚀 Server running on port ${PORT}`);
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('  ✨ Fast response mode enabled!');
-  console.log('  🤖 Using Gemini 2.5 Flash (最新高性能AIモデル)');
+  console.log('  🤖 Using NEW SDK: @google/genai v1.4.0'); 
+  console.log('  🚀 Model: Gemini 2.5 Flash (最新高性能AIモデル)');
+  console.log('  📊 Dynamic rate limits based on API tier');
   console.log('  ⚡ Immediate response + Background analysis');
-  console.log('  📊 Rate limits: RPM 10, TPM 250K, RPD 500');
   console.log('  🎯 High-quality AI analysis with rate limiting');
   console.log('==================================================');
 });
