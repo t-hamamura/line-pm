@@ -20,6 +20,30 @@ class ProjectAnalyzer {
     this.dailyResetTime = Date.now() + 24 * 60 * 60 * 1000; // 24時間後
   }
 
+  // 2025年最新のレート制限設定
+  setRateLimits() {
+    const rateLimits = {
+      free: { 
+        rpm: 5,           // Free tier: 5 requests per minute
+        rpd: 25,          // Free tier: 25 requests per day
+        tpm: 1000000      // 1M tokens per minute
+      },
+      tier1: { 
+        rpm: 15,          // Tier 1: 15 requests per minute
+        rpd: 1500,        // Tier 1: 1500 requests per day
+        tpm: 1500         // 1500 tokens per minute
+      },
+      tier2: { 
+        rpm: 2000,        // Tier 2: 2000 requests per minute
+        rpd: Infinity,    // No daily limit
+        tpm: 4000000      // 4M tokens per minute
+      }
+    };
+    
+    this.limits = rateLimits[this.tier] || rateLimits.free;
+    console.log(`📊 Rate limits configured for ${this.tier}:`, this.limits);
+  }
+
   // レート制限チェック
   canMakeRequest() {
     const now = Date.now();
