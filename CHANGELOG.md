@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-06-12
+
+### 🤖 AI Model Upgrade
+- **Gemini 2.5 Pro Integration**: Upgraded to the most advanced AI model for enhanced accuracy
+- **Improved Analysis Precision**: Better understanding of project requirements and context
+- **Enhanced WBS Generation**: More sophisticated and realistic work breakdown structures
+
+### 🎯 Analysis Accuracy Improvements
+- **Strict Property Inference**: Properties only set when explicitly mentioned in input text
+- **No-Guess Policy Enhanced**: Eliminated inappropriate inferences for priority, type, and project assignments
+- **Contextual Understanding**: Better distinction between different types of tasks and projects
+
+### 🏷️ Property System Updates
+- **Emoji Removal**: Cleaned up all property values by removing emojis for better data consistency
+- **Status Standardization**: Default status changed from "📥 未分類" to "未分類"
+- **Property Value Cleanup**: All select options now use clean text without emoji prefixes
+
+### 📱 LINE Interface Redesign
+- **New Message Format**: Improved readability with better structure and spacing
+- **Enhanced Title Display**: Title now displayed on separate line for better visual hierarchy
+- **Clearer Property Layout**: Each property clearly labeled with appropriate status indicators
+- **Improved WBS Preview**: Better formatting for work breakdown structure summaries
+
+### 🔧 Technical Improvements
+- **Temperature Optimization**: Reduced temperature to 0.1 for more consistent responses
+- **Token Efficiency**: Optimized generation parameters for better performance
+- **Timeout Adjustment**: Extended timeout to 10 seconds for complex analysis
+- **Error Handling**: Enhanced fallback mechanisms for edge cases
+
+### 🛡️ Data Quality Enhancements
+- **Validation Strengthening**: More rigorous validation of input text analysis
+- **False Positive Reduction**: Significantly reduced incorrect property assignments
+- **Null Handling**: Improved handling of empty or undefined property values
+- **Schema Compliance**: Better alignment with actual Notion database schema
+
 ## [2.0.0] - 2025-06-12
 
 ### 🚀 Major Features Added
@@ -97,6 +132,26 @@ New:      タイトル → ステータス → 優先度 → 種別 → レベ�
 
 ## Upgrade Notes
 
+### From v2.0.0 to v2.1.0
+
+#### Breaking Changes
+- **AI Model**: Gemini 2.0 Flash-Lite → Gemini 2.5 Pro
+- **Property Values**: All emoji prefixes removed from property values
+- **LINE Message Format**: New structured layout with improved readability
+- **Analysis Behavior**: Much stricter property inference (fewer automatic assignments)
+
+#### Migration Steps
+1. Update environment variables (no changes required for API keys)
+2. Test LINE bot with sample messages to verify new format
+3. Verify that property inference is now more conservative
+4. Check Notion integration with clean property values
+
+#### Expected Changes
+- **Accuracy**: Significantly reduced false positive property assignments
+- **User Experience**: Cleaner, more readable LINE messages
+- **Data Quality**: More consistent property values without emoji clutter
+- **AI Performance**: Better analysis quality with Gemini 2.5 Pro
+
 ### From v1.x to v2.0.0
 
 #### Breaking Changes
@@ -127,13 +182,13 @@ New:      タイトル → ステータス → 優先度 → 種別 → レベ�
 
 ## Planned Features
 
-### v2.1.0 (Planned)
+### v2.2.0 (Planned)
 - [ ] **Multi-language Support**: English interface option
 - [ ] **Progress Tracking**: Integration with Notion progress fields
 - [ ] **Team Management**: Multi-user support with user identification
 - [ ] **Custom Templates**: User-defined WBS templates
 
-### v2.2.0 (Planned)  
+### v2.3.0 (Planned)  
 - [ ] **Voice Input**: LINE voice message support
 - [ ] **Image Analysis**: Project screenshots and diagrams analysis
 - [ ] **Calendar Integration**: Automatic deadline setting based on calendar
