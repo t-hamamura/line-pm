@@ -76,14 +76,26 @@ console.log(`  - Project Analyzer: ${projectAnalyzer ? '✅ Ready' : '❌ Failed
 console.log(`  - Notion Service: ${notionService ? '✅ Ready' : '❌ Failed'}`);
 console.log(`  - LINE Client: ${lineClient ? '✅ Ready' : '❌ Failed'}`);
 
-// 環境変数チェック
+// Gemini API キー or Google Cloud 認証のどちらかが必要
 const requiredEnvVars = [
   'LINE_CHANNEL_ACCESS_TOKEN',
-  'LINE_CHANNEL_SECRET', 
-  'GEMINI_API_KEY',
+  'LINE_CHANNEL_SECRET',
   'NOTION_API_KEY',
   'NOTION_DATABASE_ID'
 ];
+
+// Gemini API 認証チェック（新SDK対応）
+const hasGeminiApiKey = !!process.env.GEMINI_API_KEY;
+const hasGoogleCloudAuth = !!(
+  process.env.GOOGLE_CLOUD_PROJECT && 
+  process.env.GOOGLE_APPLICATION_CREDENTIALS
+);
+
+if (!hasGeminiApiKey && !hasGoogleCloudAuth) {
+  console.error('❌ Gemini API authentication not configured');
+  console.error('Either set GEMINI_API_KEY or configure Google Cloud authentication');
+  process.exit(1);
+}
 
 console.log('🔍 Environment Variables Check:');
 requiredEnvVars.forEach(varName => {
