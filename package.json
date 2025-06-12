@@ -1,7 +1,7 @@
 {
   "name": "line-pm",
-  "version": "2.5.0",
-  "description": "LINE Bot × Gemini 2.5 Flash × Notion による次世代プロジェクト管理システム - バックグラウンド処理・WBS自動生成・AI分析",
+  "version": "2.6.0",
+  "description": "LINE Bot × Gemini 2.5 Flash × Notion による次世代プロジェクト管理システム - 新SDK対応版",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
