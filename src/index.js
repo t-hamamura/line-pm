@@ -149,48 +149,59 @@ async function handleEvent(event) {
     // Notionに実際に登録された値を取得
     const actualProps = await notionService.getPageProperties(notionPage.id);
 
-    // 詳細な応答メッセージを作成
+    // 新しい形式での詳細な応答メッセージを作成
     function createDetailedReplyMessage(analysisResult, notionPage, actualProps) {
       const props = analysisResult.properties;
       
       let replyText = `✅ プロジェクトを登録しました！\n\n`;
-      replyText += `📝 タイトル: ${props.Name}\n`;
-      replyText += `📋 ステータス: 📥 未分類\n`;
       
-      // 詳細情報（値がある場合のみ表示）
-      if (actualProps.優先度 && actualProps.優先度 !== '(空欄)') {
+      // タイトル（新形式）
+      replyText += `📝 タイトル\n${props.Name}\n\n`;
+      
+      // 優先度
+      if (actualProps.優先度 && actualProps.優先度 !== '(空欄)' && actualProps.優先度 !== null) {
         replyText += `⭐ 優先度: ${actualProps.優先度}\n`;
       } else {
         replyText += `⭐ 優先度: (空欄)\n`;
       }
       
-      if (actualProps.種別 && actualProps.種別 !== '(空欄)') {
+      // 種別
+      if (actualProps.種別 && actualProps.種別 !== '(空欄)' && actualProps.種別 !== null) {
         replyText += `🏷️ 種別: ${actualProps.種別}\n`;
       } else {
         replyText += `🏷️ 種別: (空欄)\n`;
       }
       
-      if (actualProps.レベル && actualProps.レベル !== '(空欄)') {
+      // レベル
+      if (actualProps.レベル && actualProps.レベル !== '(空欄)' && actualProps.レベル !== null) {
         replyText += `🎚️ レベル: ${actualProps.レベル}\n`;
       } else {
         replyText += `🎚️ レベル: (空欄)\n`;
       }
       
-      if (actualProps.成果物 && actualProps.成果物 !== '(空欄)') {
+      // 成果物
+      if (actualProps.成果物 && actualProps.成果物 !== '(空欄)' && actualProps.成果物 !== null) {
         replyText += `📦 成果物: ${actualProps.成果物}\n`;
       } else {
         replyText += `📦 成果物: (空欄)\n`;
       }
       
-      replyText += `👤 担当者: (空欄)\n`;
+      // 担当者
+      if (actualProps.担当者 && actualProps.担当者 !== '(空欄)' && actualProps.担当者 !== null) {
+        replyText += `👤 担当者: ${actualProps.担当者}\n`;
+      } else {
+        replyText += `👤 担当者: (空欄)\n`;
+      }
       
-      if (actualProps.期限 && actualProps.期限 !== '(空欄)') {
+      // 期限
+      if (actualProps.期限 && actualProps.期限 !== '(空欄)' && actualProps.期限 !== null) {
         replyText += `🗓️ 期限: ${actualProps.期限}\n`;
       } else {
         replyText += `🗓️ 期限: (空欄)\n`;
       }
       
-      if (actualProps.案件 && actualProps.案件 !== '(空欄)') {
+      // 案件
+      if (actualProps.案件 && actualProps.案件 !== '(空欄)' && actualProps.案件 !== null) {
         replyText += `💼 案件: ${actualProps.案件}\n`;
       } else {
         replyText += `💼 案件: (空欄)\n`;
@@ -412,5 +423,6 @@ app.listen(PORT, () => {
   console.log(`         Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('  Ready to receive LINE webhook requests!');
   console.log('  ✨ Deduplication feature enabled');
+  console.log('  🤖 Using Gemini 2.5 Pro for analysis');
   console.log('==================================================');
 });
