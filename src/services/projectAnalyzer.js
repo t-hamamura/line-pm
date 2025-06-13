@@ -100,16 +100,20 @@ class ProjectAnalyzer {
     console.log(`📊 Request recorded: RPM ${this.requestCount}/${this.limits.rpm}, RPD ${this.dailyCount}/${this.limits.rpd === Infinity ? '∞' : this.limits.rpd}`);
   }
 
-  async analyzeText(text) {
+  async analyzeText(title, details = '') {
     try {
       // レート制限チェック
       if (!this.canMakeRequest()) {
         console.warn('⚠️ Rate limit approaching, using fallback immediately');
-        return this.createEnhancedFallbackResponse(text);
+        return this.createEnhancedFallbackResponse(title, details);
       }
 
       const systemPrompt = `
 あなたはマーケティング・コンサルティングに関するプロジェクト管理の専門家です。以下の入力を分析し、今すぐに実行可能なレベルに細分化されたWBSを含むプロジェクト情報を作成してください。
+
+# 入力情報
+タイトル: "${title}"
+詳細・備考: "${details || '(詳細情報なし)'}"
 
 # 出力ルール
 1. JSONのみ出力（\`\`\`は不要）
@@ -119,11 +123,13 @@ class ProjectAnalyzer {
 5. ステータスは常に"未分類"
 6. 実際のNotionプロパティ値のみ使用（絵文字なし）
 7. メッセージから読み取れない推論をしてはならない
+8. 詳細・備考の情報も含めて総合的に分析してください
 
 # 期待する出力形式
 {
   "properties": {
     "ステータス": "未分類",
+    "備考": "${details || ''}",
     "種別": null,
     "優先度": null,
     "期限": null,
@@ -182,9 +188,11 @@ class ProjectAnalyzer {
 日付明記時のみYYYY-MM-DD形式
 
 # 分析対象
-"${text}"
+タイトル: "${title}"
+詳細: "${details || ''}"
 
 上記の入力から：
+1. タイトルと詳細を総合的に分析
 2. 期限がある場合は正確に抽出（YYYY-MM-DD形式）
 
 JSON形式で出力してください：`;
@@ -237,7 +245,12 @@ JSON形式で出力してください：`;
       }
       
       // プロジェクト名を設定
-      parsedResult.properties.Name = text;
+      parsedResult.properties.Name = title;
+      
+      // 詳細情報があれば備考に設定
+      if (details && details.trim()) {
+        parsedResult.properties.備考 = details.trim();
+      }
 
       console.log('✅ Final analyzed data from Gemini:', {
         hasProperties: !!parsedResult.properties,
@@ -293,16 +306,16 @@ JSON形式で出力してください：`;
   }
 
   // WBS自動生成
-  generateWBS(text) {
-    const textLower = text.toLowerCase();
+  generateWBS(title, details = '') {
+    const combinedText = `${title} ${details}`.toLowerCase();
     
     // プロジェクト系の判定を詳細化
-    if (this.isProjectType(textLower)) {
-      return this.generateProjectWBS(text);
-    } else if (this.isTaskType(textLower)) {
-      return this.generateTaskWBS(text);
+    if (this.isProjectType(combinedText)) {
+      return this.generateProjectWBS(title, details);
+    } else if (this.isTaskType(combinedText)) {
+      return this.generateTaskWBS(title, details);
     } else {
-      return this.generateMemoWBS(text);
+      return this.generateMemoWBS(title, details);
     }
   }
 
@@ -316,11 +329,11 @@ JSON形式で出力してください：`;
     return taskKeywords.some(keyword => textLower.includes(keyword));
   }
 
-  generateProjectWBS(text) {
-    return `## ${text}
+  generateProjectWBS(title, details = '') {
+    return `## ${title}
 
 ### 🎯 プロジェクト概要
-このプロジェクトの具体的な実行計画を段階的に示します。
+${details ? details : 'このプロジェクトの具体的な実行計画を段階的に示します。'}
 
 ### 📋 WBS（作業分解構成図）
 
@@ -364,11 +377,11 @@ JSON形式で出力してください：`;
 - 関係者満足度の向上`;
   }
 
-  generateTaskWBS(text) {
-    return `## ${text}
+  generateTaskWBS(title, details = '') {
+    return `## ${title}
 
 ### 📝 タスク概要
-このタスクの効率的な実行手順を示します。
+${details ? details : 'このタスクの効率的な実行手順を示します。'}
 
 ### ✅ 実行ステップ
 
@@ -403,11 +416,11 @@ JSON形式で出力してください：`;
 - 完了時の適切な記録と共有`;
   }
 
-  generateMemoWBS(text) {
-    return `## ${text}
+  generateMemoWBS(title, details = '') {
+    return `## ${title}
 
 ### 💭 アイデア・思考の整理
-このアイデアを具体化するための検討事項を整理します。
+${details ? details : 'このアイデアを具体化するための検討事項を整理します。'}
 
 ### 🔍 検討ステップ
 
@@ -442,9 +455,9 @@ JSON形式で出力してください：`;
   }
 
   // 厳格なフォールバック応答
-  createEnhancedFallbackResponse(text) {
+  createEnhancedFallbackResponse(title, details = '') {
     console.log('🔄 Creating enhanced fallback response');
-    const textLower = text.toLowerCase();
+    const combinedText = `${title} ${details}`.toLowerCase();
     
     // 基本構造（nullベース）
     let priority = null;
@@ -529,7 +542,8 @@ JSON形式で出力してください：`;
 
     const fallbackResponse = {
       properties: {
-        Name: text,
+        Name: title,
+        備考: details || '',
         ステータス: "未分類",
         種別: type,
         優先度: priority,
@@ -539,7 +553,7 @@ JSON形式で出力してください：`;
         案件: project,
         担当者: assignee
       },
-      pageContent: this.generateWBS(text)
+      pageContent: this.generateWBS(title, details)
     };
 
     console.log('✅ Enhanced fallback response created');
