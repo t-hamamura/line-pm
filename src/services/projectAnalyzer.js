@@ -2,34 +2,41 @@ const { GoogleGenAI } = require('@google/genai');
 
 class ProjectAnalyzer {
   constructor() {
-  // 認証方法を判定して適切に初期化
-  if (process.env.GEMINI_API_KEY) {
-    // Gemini Developer API使用
-    this.genai = new GoogleGenAI({ 
-      apiKey: process.env.GEMINI_API_KEY 
-    });
-    console.log('🔑 Using Gemini Developer API');
-  } else if (process.env.GOOGLE_CLOUD_PROJECT) {
-    // Vertex AI使用
-    this.genai = new GoogleGenAI({
-      vertexai: true,
-      project: process.env.GOOGLE_CLOUD_PROJECT,
-      location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
-    });
-    console.log('☁️ Using Vertex AI');
-  } else {
-    throw new Error('No valid authentication configured for Gemini API');
-  }
+    try {
+      // 認証方法を判定して適切に初期化
+      if (process.env.GEMINI_API_KEY) {
+        // Gemini Developer API使用
+        this.genai = new GoogleGenAI(process.env.GEMINI_API_KEY);
+        this.model = this.genai.getGenerativeModel({ model: "gemini-1.5-flash" });
+        console.log('🔑 Using Gemini Developer API');
+      } else if (process.env.GOOGLE_CLOUD_PROJECT) {
+        // Vertex AI使用
+        this.genai = new GoogleGenAI({
+          vertexai: true,
+          project: process.env.GOOGLE_CLOUD_PROJECT,
+          location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
+        });
+        this.model = this.genai.getGenerativeModel({ model: "gemini-1.5-flash" });
+        console.log('☁️ Using Vertex AI');
+      } else {
+        throw new Error('No valid authentication configured for Gemini API');
+      }
 
-    // レート制限設定を正確に
-    this.tier = process.env.GEMINI_API_TIER || 'free';
-    this.setRateLimits();
-    
-    // レート制限管理
-    this.requestCount = 0;
-    this.resetTime = Date.now() + 60000; // 1分後
-    this.dailyCount = 0;
-    this.dailyResetTime = Date.now() + 24 * 60 * 60 * 1000; // 24時間後
+      // レート制限設定を正確に
+      this.tier = process.env.GEMINI_API_TIER || 'free';
+      this.setRateLimits();
+      
+      // レート制限管理
+      this.requestCount = 0;
+      this.resetTime = Date.now() + 60000; // 1分後
+      this.dailyCount = 0;
+      this.dailyResetTime = Date.now() + 24 * 60 * 60 * 1000; // 24時間後
+      
+      console.log('✅ ProjectAnalyzer initialized successfully');
+    } catch (error) {
+      console.error('❌ Failed to initialize ProjectAnalyzer:', error.message);
+      throw error;
+    }
   }
 
   // 2025年最新のレート制限設定
@@ -101,7 +108,7 @@ class ProjectAnalyzer {
         return this.createEnhancedFallbackResponse(text);
       }
 
-const systemPrompt = `
+      const systemPrompt = `
 あなたはマーケティング・コンサルティングに関するプロジェクト管理の専門家です。以下の入力を分析し、今すぐに実行可能なレベルに細分化されたWBSを含むプロジェクト情報を作成してください。
 
 # 出力ルール
@@ -183,28 +190,16 @@ const systemPrompt = `
 JSON形式で出力してください：`;
 
       console.log('🤖 Using NEW SDK: @google/genai v1.4.0');
-      console.log('🚀 Model: gemini-2.5-flash-preview-05-20 (最新高性能モデル)');
+      console.log('🚀 Model: gemini-1.5-flash (安定版モデル)');
       
-     // ✅ 正しい新SDK構文
-    const response = await this.genai.models.generateContent({
-      model: "gemini-2.0-flash-001",  // 最新モデル名
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: systemPrompt }]
-        }
-      ],
-      config: {
-        temperature: 0.2,
-        topK: 20,
-        topP: 0.8,
-        maxOutputTokens: 1024,
-      }
-    });
-
-    let jsonString = response.text();
+      // ✅ 正しい新SDK構文 - 修正版
+      const result = await this.model.generateContent(systemPrompt);
+      const response = await result.response;
+      let jsonString = response.text();
       
-      console.log('✅ Gemini 2.5 Flash response received, length:', jsonString.length);
+      this.recordRequest();
+      
+      console.log('✅ Gemini response received, length:', jsonString.length);
       
       // JSONの清理
       jsonString = this.cleanJsonResponse(jsonString);
@@ -212,7 +207,7 @@ JSON形式で出力してください：`;
       let parsedResult;
       try {
         parsedResult = JSON.parse(jsonString);
-        console.log('✅ Successfully parsed Gemini 2.5 Flash response');
+        console.log('✅ Successfully parsed Gemini response');
         
         // pageContentが空の場合は自動生成
         if (!parsedResult.pageContent || parsedResult.pageContent.trim() === '') {
@@ -236,7 +231,7 @@ JSON形式で出力してください：`;
         }
         
       } catch (parseError) {
-        console.warn('❌ JSON parse failed with Gemini 2.5, using enhanced fallback...', parseError.message);
+        console.warn('❌ JSON parse failed with Gemini, using enhanced fallback...', parseError.message);
         console.log('Raw response preview:', jsonString.substring(0, 200) + '...');
         parsedResult = this.createEnhancedFallbackResponse(text);
       }
@@ -244,7 +239,7 @@ JSON形式で出力してください：`;
       // プロジェクト名を設定
       parsedResult.properties.Name = text;
 
-      console.log('✅ Final analyzed data from Gemini 2.5 Flash:', {
+      console.log('✅ Final analyzed data from Gemini:', {
         hasProperties: !!parsedResult.properties,
         hasPageContent: !!parsedResult.pageContent,
         propertiesKeys: Object.keys(parsedResult.properties || {}),
@@ -254,19 +249,19 @@ JSON形式で出力してください：`;
       return parsedResult;
 
     } catch (error) {
-      console.error('❌ Error analyzing project with Gemini 2.5 Flash:', error.message);
+      console.error('❌ Error analyzing project with Gemini:', error.message);
 
-      // Gemini 2.5 Flash特有のエラー処理
+      // Gemini特有のエラー処理
       if (error.message.includes('rate limit') || error.message.includes('quota')) {
-        console.error('📊 Gemini 2.5 Flash rate limit exceeded');
-        console.error('Current limits: RPM: 10, TPM: 250K, RPD: 500');
+        console.error('📊 Gemini rate limit exceeded');
+        console.error('Current limits: RPM: 15, TPM: 1M, RPD: 1500');
         console.error('📋 Suggestion: Wait 1-2 minutes before trying again');
       } else if (error.message.includes('timeout')) {
-        console.error('⏰ Gemini 2.5 Flash request timed out (10 seconds)');
+        console.error('⏰ Gemini request timed out');
       } else if (error.message.includes('API key')) {
         console.error('🔑 API key issue. Check environment variable GEMINI_API_KEY');
       } else if (error.message.includes('model not found')) {
-        console.error('🤖 Gemini 2.5 Flash model not available. Check API access');
+        console.error('🤖 Gemini model not available. Check API access');
       } else {
         console.error('🔍 Unknown error type:', error.message);
       }
@@ -444,12 +439,11 @@ JSON形式で出力してください：`;
 - このアイデアの背景や思考プロセス
 - 関連する参考情報やヒント
 - 今後検討すべき追加要素`;
-    }
   }
 
-// Gemini 2.5対応の厳格なフォールバック応答
+  // 厳格なフォールバック応答
   createEnhancedFallbackResponse(text) {
-    console.log('🔄 Creating enhanced fallback response for Gemini 2.5 Flash');
+    console.log('🔄 Creating enhanced fallback response');
     const textLower = text.toLowerCase();
     
     // 基本構造（nullベース）
@@ -548,30 +542,30 @@ JSON形式で出力してください：`;
       pageContent: this.generateWBS(text)
     };
 
-    console.log('✅ Enhanced fallback response created (Gemini 2.5 compatible)');
+    console.log('✅ Enhanced fallback response created');
     return fallbackResponse;
   }
 
   // レート制限状況の取得
   getRateLimitStatus() {
-  return {
-    sdk_version: '@google/genai v1.4.0',
-    tier: this.tier,
-    rpm: {
-      current: this.requestCount,
-      limit: this.limits.rpm,
-      resetTime: this.resetTime
-    },
-    rpd: {
-      current: this.dailyCount,
-      limit: this.limits.rpd === Infinity ? 'unlimited' : this.limits.rpd,
-      resetTime: this.dailyResetTime
-    },
-    tpm: {
-      limit: this.limits.tpm
-    }
-  };
-}
+    return {
+      sdk_version: '@google/genai v1.4.0',
+      tier: this.tier,
+      rpm: {
+        current: this.requestCount,
+        limit: this.limits.rpm,
+        resetTime: this.resetTime
+      },
+      rpd: {
+        current: this.dailyCount,
+        limit: this.limits.rpd === Infinity ? 'unlimited' : this.limits.rpd,
+        resetTime: this.dailyResetTime
+      },
+      tpm: {
+        limit: this.limits.tpm
+      }
+    };
+  }
 }
 
 module.exports = new ProjectAnalyzer();
