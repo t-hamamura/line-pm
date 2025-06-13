@@ -7,7 +7,7 @@ class ProjectAnalyzer {
       if (process.env.GEMINI_API_KEY) {
         // Gemini Developer API使用
         this.genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        this.model = this.genai.getGenerativeModel({ model: "gemini-1.5-flash" });
+        this.model = this.genai.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
         console.log('🔑 Using Gemini Developer API');
       } else if (process.env.GOOGLE_CLOUD_PROJECT) {
         // Vertex AI使用
@@ -16,7 +16,7 @@ class ProjectAnalyzer {
           project: process.env.GOOGLE_CLOUD_PROJECT,
           location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
         });
-        this.model = this.genai.getGenerativeModel({ model: "gemini-1.5-flash" });
+        this.model = this.genai.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
         console.log('☁️ Using Vertex AI');
       } else {
         throw new Error('No valid authentication configured for Gemini API');
@@ -190,7 +190,7 @@ class ProjectAnalyzer {
 JSON形式で出力してください：`;
 
       console.log('🤖 Using NEW SDK: @google/genai v1.4.0');
-      console.log('🚀 Model: gemini-1.5-flash (安定版モデル)');
+      console.log('🚀 Model: gemini-2.5-flash-preview-05-20 (安定版モデル)');
       
       // ✅ 正しい新SDK構文 - 修正版
       const result = await this.model.generateContent(systemPrompt);
