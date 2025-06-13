@@ -6,12 +6,12 @@ class ProjectAnalyzer {
       // 認証方法を判定して適切に初期化
       if (process.env.GEMINI_API_KEY) {
         // Gemini Developer API使用
-        this.genai = new GoogleGenAI(process.env.GEMINI_API_KEY);
+        this.genai = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         this.model = this.genai.getGenerativeModel({ model: "gemini-1.5-flash" });
         console.log('🔑 Using Gemini Developer API');
       } else if (process.env.GOOGLE_CLOUD_PROJECT) {
         // Vertex AI使用
-        this.genai = new GoogleGenAI({
+        this.genai = new GoogleGenerativeAI({
           vertexai: true,
           project: process.env.GOOGLE_CLOUD_PROJECT,
           location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1'
