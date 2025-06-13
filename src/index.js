@@ -114,6 +114,9 @@ async function handleEvent(event) {
   }
 
   const userText = event.message.text.trim();
+  const lines = userText.split('\n');
+  const title = lines[0].trim();
+  const details = lines.slice(1).join('\n').trim();
   const userId = event.source.userId;
   const eventId = event.webhookEventId || `${userId}-${event.timestamp}`;
   const messageHash = `${userId}-${userText}-${Math.floor(Date.now() / 300000)}`;
@@ -184,7 +187,7 @@ async function handleEvent(event) {
     });
 
     // 🚀 【改善点2】バックグラウンドで非同期処理を開始
-    processInBackground(userId, userText);
+    processInBackground(userId, title, details);
 
   } catch (error) {
     console.error('[ERROR] Failed to send immediate response:', error);
@@ -197,14 +200,14 @@ async function handleEvent(event) {
 }
 
 // 🚀 【新機能】バックグラウンド処理関数
-async function processInBackground(userId, userText) {
+async function processInBackground(userId, title, details) {
   try {
     console.log('[BACKGROUND] Starting analysis and page creation...');
     const startTime = Date.now();
     
     // Geminiでテキストを解析
     console.log('[GEMINI] Analyzing text...');
-    const analysisResult = await projectAnalyzer.analyzeText(userText);
+    const analysisResult = await projectAnalyzer.analyzeText(title, details);
     
     // Notionにページを作成
     console.log('[NOTION] Creating page...');
