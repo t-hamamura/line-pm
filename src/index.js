@@ -115,8 +115,9 @@ async function handleEvent(event) {
 
   const userText = event.message.text.trim();
   const lines = userText.split('\n');
-  const title = lines[0].trim();
-  const details = lines.slice(1).join('\n').trim();
+  const title = lines[0].trim(); // 1行目をタイトルとして使用
+  const details = lines.slice(1).join('\n').trim(); // 2行目以降を詳細として使用
+  
   const userId = event.source.userId;
   const eventId = event.webhookEventId || `${userId}-${event.timestamp}`;
   const messageHash = `${userId}-${userText}-${Math.floor(Date.now() / 300000)}`;
@@ -203,9 +204,11 @@ async function handleEvent(event) {
 async function processInBackground(userId, title, details) {
   try {
     console.log('[BACKGROUND] Starting analysis and page creation...');
+    console.log(`[BACKGROUND] Title: "${title}"`);
+    console.log(`[BACKGROUND] Details: "${details || '(なし)'}"`);
     const startTime = Date.now();
     
-    // Geminiでテキストを解析
+    // Geminiでテキストを解析（タイトルと詳細を分けて渡す）
     console.log('[GEMINI] Analyzing text...');
     const analysisResult = await projectAnalyzer.analyzeText(title, details);
     
