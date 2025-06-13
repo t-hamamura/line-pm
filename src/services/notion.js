@@ -192,6 +192,7 @@ class NotionService {
       if (properties.レベル) valueMap['レベル'] = properties.レベル;
       if (properties.案件) valueMap['案件'] = properties.案件;
       if (properties.担当者) valueMap['担当者'] = properties.担当者;
+      if (properties.備考) valueMap['備考'] = properties.備考;
 
       // 期限が指定されている場合は追加
       if (properties.期限 && properties.期限 !== 'YYYY-MM-DD' && properties.期限 !== null) {
