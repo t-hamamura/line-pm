@@ -1,4 +1,4 @@
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 class ProjectAnalyzer {
   constructor() {
@@ -194,7 +194,7 @@ JSON形式で出力してください：`;
       
       // ✅ 正しい新SDK構文 - 修正版
       const result = await this.model.generateContent(systemPrompt);
-      const response = await result.response;
+      const response = result.response;
       let jsonString = response.text();
       
       this.recordRequest();
