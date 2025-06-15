@@ -1,5 +1,22 @@
 'use strict';
 
+// --- URL抽出関数の追加 ---
+function extractURLs(text) {
+  if (!text || typeof text !== 'string') return [];
+  
+  // URLの正規表現パターン
+  const urlPattern = /(https?:\/\/[^\s\u3000]+)/gi;
+  const matches = text.match(urlPattern);
+  
+  if (!matches) return [];
+  
+  // 重複を除去し、有効なURLのみを返す
+  const uniqueUrls = [...new Set(matches)];
+  console.log(`[URL] Extracted ${uniqueUrls.length} URLs:`, uniqueUrls);
+  
+  return uniqueUrls;
+}
+
 require('dotenv').config();
 const express = require('express');
 const { Client, middleware } = require('@line/bot-sdk');
@@ -200,7 +217,6 @@ async function handleEvent(event) {
   }
 }
 
-// 🚀 【新機能】バックグラウンド処理関数
 async function processInBackground(userId, title, details) {
   try {
     console.log('[BACKGROUND] Starting analysis and page creation...');
@@ -208,9 +224,14 @@ async function processInBackground(userId, title, details) {
     console.log(`[BACKGROUND] Details: "${details || '(なし)'}"`);
     const startTime = Date.now();
     
-    // Geminiでテキストを解析（タイトルと詳細を分けて渡す）
+    // URLを抽出
+    const combinedText = `${title} ${details || ''}`;
+    const extractedUrls = extractURLs(combinedText);
+    console.log(`[URL] Found ${extractedUrls.length} URLs in message`);
+    
+    // Geminiでテキストを解析（タイトル、詳細、URLを分けて渡す）
     console.log('[GEMINI] Analyzing text...');
-    const analysisResult = await projectAnalyzer.analyzeText(title, details);
+    const analysisResult = await projectAnalyzer.analyzeText(title, details, extractedUrls);
     
     // Notionにページを作成
     console.log('[NOTION] Creating page...');
