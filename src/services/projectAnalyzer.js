@@ -476,66 +476,66 @@ ${details ? details : 'このアイデアを具体化するための検討事項
     let assignee = null;
     
     // 優先度判定 - 明確に記載されている場合のみ
-    if (textLower.includes('緊急') || textLower.includes('至急') || textLower.includes('急ぎ')) {
+    if (combinedText.includes('緊急') || combinedText.includes('至急') || combinedText.includes('急ぎ')) {
       priority = "緊急";
-    } else if (textLower.includes('重要') && !textLower.includes('重要な')) {
+    } else if (combinedText.includes('重要') && !combinedText.includes('重要な')) {
       priority = "重要";
-    } else if (textLower.includes('普通')) {
+    } else if (combinedText.includes('普通')) {
       priority = "普通";
-    } else if (textLower.includes('アイデア') || textLower.includes('メモ')) {
+    } else if (combinedText.includes('アイデア') || combinedText.includes('メモ')) {
       priority = "アイデア";
     }
     
     // 種別判定 - 極めて明確な場合のみ
-    if (textLower.includes('戦略策定') || textLower.includes('企画立案')) {
+    if (combinedText.includes('戦略策定') || combinedText.includes('企画立案')) {
       type = "企画・戦略";
-    } else if (textLower.includes('制作') && (textLower.includes('hp') || textLower.includes('サイト'))) {
+    } else if (combinedText.includes('制作') && (combinedText.includes('hp') || combinedText.includes('サイト'))) {
       type = "制作・開発";
       deliverable = "コンテンツ";
-    } else if (textLower.includes('システム開発') || textLower.includes('アプリ開発')) {
+    } else if (combinedText.includes('システム開発') || combinedText.includes('アプリ開発')) {
       type = "制作・開発";
       deliverable = "システム・ツール";
-    } else if (textLower.includes('データ分析') || textLower.includes('効果測定')) {
+    } else if (combinedText.includes('データ分析') || combinedText.includes('効果測定')) {
       type = "分析・改善";
       deliverable = "レポート";
     }
     
     // レベル判定 - 明確に記載されている場合のみ
-    if (textLower.includes('プロジェクト')) {
+    if (combinedText.includes('プロジェクト')) {
       level = "プロジェクト";
-    } else if (textLower.includes('タスク')) {
+    } else if (combinedText.includes('タスク')) {
       level = "タスク";
-    } else if (textLower.includes('アクション')) {
+    } else if (combinedText.includes('アクション')) {
       level = "アクション";
-    } else if (textLower.includes('メモ') || textLower.includes('アイデア')) {
+    } else if (combinedText.includes('メモ') || combinedText.includes('アイデア')) {
       level = "メモ";
     }
     
     // 案件判定 - キーワードが明確に含まれている場合のみ
-    if (textLower.includes('oneマーケ') || textLower.includes('マーケラボ')) {
+    if (combinedText.includes('oneマーケ') || combinedText.includes('マーケラボ')) {
       project = "ONEマーケ/マーケラボ";
-    } else if (textLower.includes('redeal') || textLower.includes('リディアル')) {
+    } else if (combinedText.includes('redeal') || combinedText.includes('リディアル')) {
       project = "るい/redeal.";
-    } else if (textLower.includes('池袋') || textLower.includes('サンシャイン')) {
+    } else if (combinedText.includes('池袋') || combinedText.includes('サンシャイン')) {
       project = "池袋サンシャイン美容外科";
-    } else if (textLower.includes('アンズボーテ')) {
+    } else if (combinedText.includes('アンズボーテ')) {
       project = "アンズボーテ";
-    } else if (textLower.includes('femuse') || textLower.includes('フェミューズ')) {
+    } else if (combinedText.includes('femuse') || combinedText.includes('フェミューズ')) {
       project = "femuse";
-    } else if (textLower.includes('spirits') || textLower.includes('スピリッツ')) {
+    } else if (combinedText.includes('spirits') || combinedText.includes('スピリッツ')) {
       project = "SPIRITS";
-    } else if (textLower.includes('talklabel') || textLower.includes('トークラベル')) {
+    } else if (combinedText.includes('talklabel') || combinedText.includes('トークラベル')) {
       project = "TalkLabel";
-    } else if (textLower.includes('junoa') || textLower.includes('ユノア')) {
+    } else if (combinedText.includes('junoa') || combinedText.includes('ユノア')) {
       project = "JUNOa";
-    } else if (textLower.includes('neam') || textLower.includes('ニーム')) {
+    } else if (combinedText.includes('neam') || combinedText.includes('ニーム')) {
       project = "neam";
-    } else if (textLower.includes('onlyone') || textLower.includes('オンリーワン')) {
+    } else if (combinedText.includes('onlyone') || combinedText.includes('オンリーワン')) {
       project = "ONLYONE";
     }
     
     // 期限抽出 - 明確に日付が記載されている場合のみ
-    const dateMatches = text.match(/(\d{1,2})月(\d{1,2})日|(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+    const dateMatches = combinedText.match(/(\d{1,2})月(\d{1,2})日|(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
     if (dateMatches) {
       if (dateMatches[1] && dateMatches[2]) {
         const currentYear = new Date().getFullYear();
