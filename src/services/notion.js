@@ -159,7 +159,7 @@ class NotionService {
   async createPageFromAnalysis(analysisResult) {
     try {
       console.log('[NOTION] Starting page creation process...');
-      const { properties, pageContent } = analysisResult;
+      const { properties, pageContent, urls } = analysisResult;
       
       // データベースのスキーマを取得
       const schema = await this.getDatabaseSchema();
@@ -197,6 +197,27 @@ class NotionService {
       // 期限が指定されている場合は追加
       if (properties.期限 && properties.期限 !== 'YYYY-MM-DD' && properties.期限 !== null) {
         valueMap['期限'] = properties.期限;
+      }
+
+      // 関連リンクプロパティの処理
+      if (urls && urls.length > 0) {
+        console.log(`[NOTION] Processing ${urls.length} URLs for 関連リンク property...`);
+        
+        // URLs をファイル&メディア形式に変換
+        const fileObjects = urls.map((url, index) => ({
+          name: `関連リンク${index + 1}`,
+          external: {
+            url: url.trim()
+          }
+        }));
+        
+        // 関連リンクプロパティが存在する場合のみ設定
+        if (schema['関連リンク']) {
+          valueMap['関連リンク'] = fileObjects;
+          console.log(`[NOTION] Set 関連リンク with ${fileObjects.length} URLs`);
+        } else {
+          console.log('[NOTION] ⚠️ 関連リンク property not found in schema');
+        }
       }
 
       // 各プロパティを実際のスキーマに基づいて設定
@@ -353,10 +374,10 @@ class NotionService {
   }
 
   async createFallbackPage(analysisResult) {
-    try {
-      console.log('[NOTION] Creating fallback page with minimal properties...');
-      
-      const { properties, pageContent } = analysisResult;
+  try {
+    console.log('[NOTION] Creating fallback page with minimal properties...');
+    
+    const { properties, pageContent, urls } = analysisResult;
       const schema = await this.getDatabaseSchema();
       
       // 最小限のプロパティ（タイトルと記入日のみ）
@@ -374,6 +395,18 @@ class NotionService {
       const today = new Date().toISOString().split('T')[0];
       if (schema['記入日'] && schema['記入日'].type === 'date') {
         fallbackProperties['記入日'] = { date: { start: today } };
+      }
+
+    // 関連リンクの設定（フォールバック用）
+      if (urls && urls.length > 0 && schema['関連リンク']) {
+        const fileObjects = urls.map((url, index) => ({
+          name: `関連リンク${index + 1}`,
+          external: {
+            url: url.trim()
+          }
+        }));
+        fallbackProperties['関連リンク'] = { files: fileObjects };
+        console.log(`[NOTION] Fallback: Set 関連リンク with ${fileObjects.length} URLs`);
       }
 
       const response = await this.client.pages.create({
