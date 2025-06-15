@@ -204,10 +204,10 @@ class NotionService {
         console.log(`[NOTION] Processing ${urls.length} URLs for 関連リンク property...`);
         
         // URLs をファイル&メディア形式に変換
-        const fileObjects = urls.map((url, index) => ({
-          name: `関連リンク${index + 1}`,
+        const fileObjects = urls.map((urlData) => ({
+          name: urlData.title || urlData.name || 'リンク',
           external: {
-            url: url.trim()
+            url: urlData.url || urlData
           }
         }));
         
@@ -406,10 +406,10 @@ class NotionService {
 
     // 関連リンクの設定（フォールバック用）
       if (urls && urls.length > 0 && schema['関連リンク']) {
-        const fileObjects = urls.map((url, index) => ({
-          name: `関連リンク${index + 1}`,
+        const fileObjects = urls.map((urlData) => ({
+          name: urlData.title || urlData.name || 'リンク',
           external: {
-            url: url.trim()
+            url: urlData.url || urlData
           }
         }));
         fallbackProperties['関連リンク'] = { files: fileObjects };
