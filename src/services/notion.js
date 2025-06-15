@@ -337,6 +337,13 @@ class NotionService {
               console.log(`[NOTION] ⚠️ Relation property ${propName} skipped (will be set manually later)`);
               break;
 
+            case 'files':
+              if (propName === '関連リンク' && Array.isArray(value)) {
+                notionProperties[propName] = { files: value };
+                console.log(`[NOTION] ✅ Set files property: ${propName} with ${value.length} files`);
+              }
+              break;
+
             default:
               console.log(`[NOTION] ⚠️ Unsupported property type: ${propConfig.type} for ${propName}`);
           }
