@@ -1,7 +1,7 @@
 'use strict';
 
-// --- URL抽出関数の追加 ---
-function extractURLs(text) {
+// --- URL抽出とタイトル取得関数の追加 ---
+async function extractURLsWithTitles(text) {
   if (!text || typeof text !== 'string') return [];
   
   // URLの正規表現パターン
@@ -10,11 +10,70 @@ function extractURLs(text) {
   
   if (!matches) return [];
   
-  // 重複を除去し、有効なURLのみを返す
+  // 重複を除去し、有効なURLのみを抽出
   const uniqueUrls = [...new Set(matches)];
   console.log(`[URL] Extracted ${uniqueUrls.length} URLs:`, uniqueUrls);
   
-  return uniqueUrls;
+  // 各URLのタイトルを取得
+  const urlsWithTitles = [];
+  for (let i = 0; i < uniqueUrls.length; i++) {
+    const url = uniqueUrls[i];
+    const title = await getUrlTitle(url);
+    urlsWithTitles.push({
+      url: url.trim(),
+      title: title || `関連リンク${i + 1}`
+    });
+  }
+  
+  console.log(`[URL] URLs with titles:`, urlsWithTitles);
+  return urlsWithTitles;
+}
+
+// URLからタイトルを取得する関数
+async function getUrlTitle(url) {
+  try {
+    console.log(`[URL] Fetching title for: ${url}`);
+    
+    // タイムアウト設定付きでfetch
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; line-pm-bot/1.0)'
+      },
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      console.log(`[URL] Failed to fetch ${url}: ${response.status}`);
+      return null;
+    }
+    
+    const html = await response.text();
+    
+    // <title>タグからタイトルを抽出
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    if (titleMatch && titleMatch[1]) {
+      const title = titleMatch[1]
+        .replace(/\s+/g, ' ')  // 複数の空白を1つに
+        .trim()
+        .substring(0, 100);    // 100文字まで
+      
+      console.log(`[URL] Title found: "${title}"`);
+      return title;
+    }
+    
+    console.log(`[URL] No title found for ${url}`);
+    return null;
+    
+  } catch (error) {
+    console.log(`[URL] Error fetching title for ${url}:`, error.message);
+    return null;
+  }
 }
 
 require('dotenv').config();
@@ -224,9 +283,9 @@ async function processInBackground(userId, title, details) {
     console.log(`[BACKGROUND] Details: "${details || '(なし)'}"`);
     const startTime = Date.now();
     
-    // URLを抽出
+    // URLを抽出（タイトル付き）
     const combinedText = `${title} ${details || ''}`;
-    const extractedUrls = extractURLs(combinedText);
+    const extractedUrls = await extractURLsWithTitles(combinedText);
     console.log(`[URL] Found ${extractedUrls.length} URLs in message`);
     
     // Geminiでテキストを解析（タイトル、詳細、URLを分けて渡す）
