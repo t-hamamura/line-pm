@@ -204,12 +204,24 @@ class NotionService {
         console.log(`[NOTION] Processing ${urls.length} URLs for 関連リンク property...`);
         
         // URLs をファイル&メディア形式に変換
-        const fileObjects = urls.map((urlData) => ({
-          name: urlData.title || urlData.name || 'リンク',
-          external: {
-            url: urlData.url || urlData
+        const fileObjects = urls.map((urlData) => {
+          // 文字列の場合とオブジェクトの場合の両方に対応
+          if (typeof urlData === 'string') {
+            return {
+              name: `関連リンク`,
+              external: {
+                url: urlData.trim()
+              }
+            };
+          } else {
+            return {
+              name: urlData.title || 'リンク',
+              external: {
+                url: urlData.url.trim()
+              }
+            };
           }
-        }));
+        });
         
         // 関連リンクプロパティが存在する場合のみ設定
         if (schema['関連リンク']) {
@@ -406,12 +418,24 @@ class NotionService {
 
     // 関連リンクの設定（フォールバック用）
       if (urls && urls.length > 0 && schema['関連リンク']) {
-        const fileObjects = urls.map((urlData) => ({
-          name: urlData.title || urlData.name || 'リンク',
-          external: {
-            url: urlData.url || urlData
+        const fileObjects = urls.map((urlData) => {
+          // 文字列の場合とオブジェクトの場合の両方に対応
+          if (typeof urlData === 'string') {
+            return {
+              name: `関連リンク`,
+              external: {
+                url: urlData.trim()
+              }
+            };
+          } else {
+            return {
+              name: urlData.title || 'リンク',
+              external: {
+                url: urlData.url.trim()
+              }
+            };
           }
-        }));
+        });
         fallbackProperties['関連リンク'] = { files: fileObjects };
         console.log(`[NOTION] Fallback: Set 関連リンク with ${fileObjects.length} URLs`);
       }
