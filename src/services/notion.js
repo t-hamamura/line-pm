@@ -374,10 +374,10 @@ class NotionService {
   }
 
   async createFallbackPage(analysisResult) {
-  try {
-    console.log('[NOTION] Creating fallback page with minimal properties...');
-    
-    const { properties, pageContent, urls } = analysisResult;
+    try {
+      console.log('[NOTION] Creating fallback page with minimal properties...');
+      
+      const { properties, pageContent, urls } = analysisResult;
       const schema = await this.getDatabaseSchema();
       
       // 最小限のプロパティ（タイトルと記入日のみ）
