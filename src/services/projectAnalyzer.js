@@ -100,12 +100,12 @@ class ProjectAnalyzer {
     console.log(`📊 Request recorded: RPM ${this.requestCount}/${this.limits.rpm}, RPD ${this.dailyCount}/${this.limits.rpd === Infinity ? '∞' : this.limits.rpd}`);
   }
 
-  async analyzeText(title, details = '') {
+  async analyzeText(title, details = '', urls = []) {
     try {
       // レート制限チェック
       if (!this.canMakeRequest()) {
         console.warn('⚠️ Rate limit approaching, using fallback immediately');
-        return this.createEnhancedFallbackResponse(title, details);
+        return this.createEnhancedFallbackResponse(title, details, urls);
       }
 
       const systemPrompt = `
@@ -114,6 +114,7 @@ class ProjectAnalyzer {
 # 入力情報
 タイトル: "${title}"
 詳細・備考: "${details || '(詳細情報なし)'}"
+関連URL: ${urls.length > 0 ? urls.join(', ') : '(URLなし)'}
 
 # 出力ルール
 1. JSONのみ出力（\`\`\`は不要）
@@ -138,6 +139,7 @@ class ProjectAnalyzer {
     "案件": null,
     "担当者": null
   },
+  "urls": ${JSON.stringify(urls)},
   "pageContent": "## プロジェクト名\\n\\n### 🎯 概要\\nプロジェクトの目的と背景\\n\\n### 📋 WBS\\n\\n#### フェーズ1: 準備・調査\\n- [ ] 現状分析\\n- [ ] 要件定義\\n\\n#### フェーズ2: 計画・設計\\n- [ ] 詳細設計\\n- [ ] スケジュール策定\\n\\n#### フェーズ3: 実行・展開\\n- [ ] 実行開始\\n- [ ] 進捗管理\\n\\n#### フェーズ4: 完了・評価\\n- [ ] 成果確認\\n- [ ] 評価・改善\\n\\n### 📊 成果物\\n1. 項目1\\n2. 項目2"
 }
 
@@ -190,10 +192,12 @@ class ProjectAnalyzer {
 # 分析対象
 タイトル: "${title}"
 詳細: "${details || ''}"
+URL: ${urls.length > 0 ? urls.join(', ') : '(なし)'}
 
 上記の入力から：
-1. タイトルと詳細を総合的に分析
+1. タイトル、詳細、URLを総合的に分析
 2. 期限がある場合は正確に抽出（YYYY-MM-DD形式）
+3. URLは関連リンクとして保持
 
 JSON形式で出力してください：`;
 
@@ -241,7 +245,7 @@ JSON形式で出力してください：`;
       } catch (parseError) {
         console.warn('❌ JSON parse failed with Gemini, using enhanced fallback...', parseError.message);
         console.log('Raw response preview:', jsonString.substring(0, 200) + '...');
-        parsedResult = this.createEnhancedFallbackResponse(text);
+        parsedResult = this.createEnhancedFallbackResponse(title, details, urls);
       }
       
       // プロジェクト名を設定
@@ -251,6 +255,9 @@ JSON形式で出力してください：`;
       if (details && details.trim()) {
         parsedResult.properties.備考 = details.trim();
       }
+      
+      // URLを設定
+      parsedResult.urls = urls;
 
       console.log('✅ Final analyzed data from Gemini:', {
         hasProperties: !!parsedResult.properties,
@@ -280,7 +287,7 @@ JSON形式で出力してください：`;
       }
       
       console.log('🔄 Using enhanced fallback response...');
-      return this.createEnhancedFallbackResponse(text);
+      return this.createEnhancedFallbackResponse(title, details, urls);
     }
   }
 
@@ -455,7 +462,7 @@ ${details ? details : 'このアイデアを具体化するための検討事項
   }
 
   // 厳格なフォールバック応答
-  createEnhancedFallbackResponse(title, details = '') {
+  createEnhancedFallbackResponse(title, details = '', urls = []) {
     console.log('🔄 Creating enhanced fallback response');
     const combinedText = `${title} ${details}`.toLowerCase();
     
@@ -553,6 +560,7 @@ ${details ? details : 'このアイデアを具体化するための検討事項
         案件: project,
         担当者: assignee
       },
+      urls: urls,
       pageContent: this.generateWBS(title, details)
     };
 
